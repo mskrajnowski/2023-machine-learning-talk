@@ -18,38 +18,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   tini \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+
 USER dev
-WORKDIR /home/dev
-
-# Setup virtualenv
-RUN python -m venv ./venv
-ENV PATH=/home/dev/venv/bin:$PATH
-
-# Install pytorch, default to CPU-only
-ARG PYTORCH_INSTALL_FLAGS="--extra-index-url https://download.pytorch.org/whl/cpu"
-RUN pip install torch torchvision torchaudio $PYTORCH_INSTALL_FLAGS
-
-# Install jupyter notebook
-RUN pip install \
-  jupyterlab \
-  notebook \
-  ipywidgets \
-  # fix broken nbextensions
-  nbclassic==0.4.8
-
-# Install jupyter extensions
-RUN pip install jupyter_contrib_nbextensions
-RUN jupyter contrib nbextension install --sys-prefix
-
-# Install base packages
-RUN pip install \
-  ipython \
-  numpy \
-  pandas \
-  sympy \
-  matplotlib \
-  scikit-learn
-
 RUN mkdir -p /home/dev/workspace
 WORKDIR /home/dev/workspace
+
+# Setup virtualenv
+USER root
+RUN mkdir -p /opt/python && chown dev:dev /opt/python
+USER dev
+RUN python -m venv /opt/python
+ENV PATH=/opt/python/bin:$PATH
+
+# Install pip-tools
+RUN pip install --upgrade pip==23.0 pip-tools==6.12.2
+
+# Install packages
+ARG COMPUTE_DEVICE=cpu
+COPY ./requirements.$COMPUTE_DEVICE.txt ./
+RUN pip install --no-deps -r requirements.$COMPUTE_DEVICE.txt
+
+# Setup jupyter
+RUN jupyter contrib nbextension install --sys-prefix
+
 CMD bash
