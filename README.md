@@ -39,7 +39,7 @@
 4. Check if everything worked
 
     ```sh
-    docker compose run --rm jupyter python -c \
+    docker compose run --rm notebook python -c \
         'import torch; print(f"CUDA available: {torch.cuda.is_available()}")'
     ```
 
