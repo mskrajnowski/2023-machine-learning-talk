@@ -4,6 +4,7 @@ x-common:
     command: bash
     volumes:
       - ./:/home/dev/workspace
+      - dev_home:/home/dev
     working_dir: /home/dev/workspace
 
 services:
@@ -20,6 +21,9 @@ services:
 
   lab:
     <<: *python
-    command: jupyter-lab --ip 0.0.0.0 --port 8888 --no-browser
+    command: jupyter-lab --ip 0.0.0.0 --port 9999 --no-browser
     ports:
-      - 9999:8888
+      - 9999:9999
+
+volumes:
+  dev_home:
