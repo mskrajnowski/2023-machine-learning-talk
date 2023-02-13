@@ -5,7 +5,7 @@ x-common:
     # https://pytorch.org/get-started/locally/
     build:
       args:
-        PYTORCH_INSTALL_FLAGS: pytorch-cuda=11.7 -c pytorch -c nvidia
+        PYTORCH_INSTALL_FLAGS: ""
     # Allow the container to use the GPU
     # https://docs.docker.com/compose/gpu-support/
     deploy: &gpu
