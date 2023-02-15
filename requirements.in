@@ -1,12 +1,18 @@
-# jupyter
-jupyterlab
+# tools
+pip-tools
+ipython
+
+# jupyter notebook
 notebook
 ipywidgets
 nbclassic<0.5 # nbextensions seem broken with nbclassic 0.5.1
 jupyter_contrib_nbextensions
+rise
 
-# tools
-ipython
+# jupyter lab
+jupyterlab
+jupyterlab_rise
+ipympl
 
 # math
 numpy

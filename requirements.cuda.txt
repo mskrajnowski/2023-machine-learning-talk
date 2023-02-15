@@ -33,6 +33,8 @@ bleach==6.0.0
     # via nbconvert
 blis==0.7.9
     # via thinc
+build==0.10.0
+    # via pip-tools
 catalogue==2.0.8
     # via
     #   spacy
@@ -45,7 +47,9 @@ cffi==1.15.1
 charset-normalizer==3.0.1
     # via requests
 click==8.1.3
-    # via typer
+    # via
+    #   pip-tools
+    #   typer
 comm==0.1.2
     # via ipykernel
 confection==0.0.4
@@ -95,19 +99,25 @@ ipykernel==6.21.2
     #   ipywidgets
     #   nbclassic
     #   notebook
+ipympl==0.9.3
+    # via -r requirements.in
 ipython==8.10.0
     # via
     #   -r requirements.in
     #   ipykernel
+    #   ipympl
     #   ipywidgets
     #   jupyterlab
 ipython-genutils==0.2.0
     # via
+    #   ipympl
     #   jupyter-contrib-nbextensions
     #   nbclassic
     #   notebook
 ipywidgets==8.0.4
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   ipympl
 isoduration==20.11.0
     # via jsonschema
 jedi==0.18.2
@@ -188,6 +198,8 @@ jupyterlab==3.6.1
     # via -r requirements.in
 jupyterlab-pygments==0.2.2
     # via nbconvert
+jupyterlab-rise==0.1.0
+    # via -r requirements.in
 jupyterlab-server==2.19.0
     # via jupyterlab
 jupyterlab-widgets==3.0.5
@@ -206,6 +218,7 @@ matplotlib==3.6.3
     # via
     #   -r requirements.in
     #   fastai
+    #   ipympl
 matplotlib-inline==0.1.6
     # via
     #   ipykernel
@@ -251,6 +264,7 @@ notebook==6.5.2
     #   jupyter-contrib-nbextensions
     #   jupyter-nbextensions-configurator
     #   jupyterlab
+    #   rise
 notebook-shim==0.2.2
     # via nbclassic
 numpy==1.24.2
@@ -258,6 +272,7 @@ numpy==1.24.2
     #   -r requirements.in
     #   blis
     #   contourpy
+    #   ipympl
     #   matplotlib
     #   pandas
     #   scikit-learn
@@ -277,6 +292,7 @@ nvidia-cudnn-cu11==8.5.0.96
     # via torch
 packaging==23.0
     # via
+    #   build
     #   fastai
     #   fastcore
     #   ipykernel
@@ -304,8 +320,11 @@ pickleshare==0.7.5
 pillow==9.4.0
     # via
     #   fastai
+    #   ipympl
     #   matplotlib
     #   torchvision
+pip-tools==6.12.2
+    # via -r requirements.in
 platformdirs==3.0.0
     # via jupyter-core
 preshed==3.0.8
@@ -340,6 +359,8 @@ pygments==2.14.0
     #   nbconvert
 pyparsing==3.0.9
     # via matplotlib
+pyproject-hooks==1.0.0
+    # via build
 pyrsistent==0.19.3
     # via jsonschema
 python-dateutil==2.8.2
@@ -373,13 +394,11 @@ requests==2.28.2
     #   spacy
     #   torchvision
 rfc3339-validator==0.1.4
-    # via
-    #   jsonschema
-    #   jupyter-events
+    # via jsonschema
 rfc3986-validator==0.1.1
-    # via
-    #   jsonschema
-    #   jupyter-events
+    # via jsonschema
+rise==5.7.1
+    # via -r requirements.in
 scikit-learn==1.2.1
     # via
     #   -r requirements.in
@@ -435,7 +454,10 @@ threadpoolctl==3.1.0
 tinycss2==1.2.1
     # via nbconvert
 tomli==2.0.1
-    # via jupyterlab
+    # via
+    #   build
+    #   jupyterlab
+    #   pyproject-hooks
 torch==1.13.1
     # via
     #   -r requirements.in
@@ -466,6 +488,7 @@ traitlets==5.9.0
     # via
     #   comm
     #   ipykernel
+    #   ipympl
     #   ipython
     #   ipywidgets
     #   jupyter-client
@@ -512,6 +535,7 @@ wheel==0.38.4
     # via
     #   nvidia-cublas-cu11
     #   nvidia-cuda-runtime-cu11
+    #   pip-tools
 widgetsnbextension==4.0.5
     # via ipywidgets
 y-py==0.5.5

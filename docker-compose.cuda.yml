@@ -1,11 +1,6 @@
 # docker-compose.override.yml template to enable GPU acceleration using Nvidia CUDA
 x-common:
   python: &python
-    # Install CUDA-specific dependencies
-    # https://pytorch.org/get-started/locally/
-    build:
-      args:
-        COMPUTE_DEVICE: cuda
     # Allow the container to use the GPU
     # https://docs.docker.com/compose/gpu-support/
     deploy:
