@@ -206,12 +206,18 @@ jupyterlab-server==2.19.0
     # via jupyterlab
 jupyterlab-widgets==3.0.5
     # via ipywidgets
+jupytext==1.14.4
+    # via -r requirements.in
 kiwisolver==1.4.4
     # via matplotlib
 langcodes==3.3.0
     # via spacy
 lxml==4.9.2
     # via jupyter-contrib-nbextensions
+markdown-it-py==2.1.0
+    # via
+    #   jupytext
+    #   mdit-py-plugins
 markupsafe==2.1.2
     # via
     #   jinja2
@@ -225,6 +231,10 @@ matplotlib-inline==0.1.6
     # via
     #   ipykernel
     #   ipython
+mdit-py-plugins==0.3.3
+    # via jupytext
+mdurl==0.1.2
+    # via markdown-it-py
 mistune==2.0.5
     # via nbconvert
 mpmath==1.2.1
@@ -250,6 +260,7 @@ nbconvert==7.2.9
 nbformat==5.7.3
     # via
     #   jupyter-server
+    #   jupytext
     #   nbclassic
     #   nbclient
     #   nbconvert
@@ -372,6 +383,7 @@ pyyaml==6.0
     #   fastai
     #   jupyter-events
     #   jupyter-nbextensions-configurator
+    #   jupytext
 pyzmq==25.0.0
     # via
     #   ipykernel
@@ -445,6 +457,8 @@ threadpoolctl==3.1.0
     # via scikit-learn
 tinycss2==1.2.1
     # via nbconvert
+toml==0.10.2
+    # via jupytext
 tomli==2.0.1
     # via
     #   build

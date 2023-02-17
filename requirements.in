@@ -8,6 +8,7 @@ ipywidgets
 nbclassic<0.5 # nbextensions seem broken with nbclassic 0.5.1
 jupyter_contrib_nbextensions
 rise
+jupytext
 
 # jupyter lab
 jupyterlab
