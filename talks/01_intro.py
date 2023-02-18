@@ -117,132 +117,126 @@ def plot_func_with_loss(a,b,c):
     plt.show()
     
     loss = mean_squared_error(y, y_predicted)
-    display(loss)
+    print("loss =", loss)
 
 
 # -
 
 interactive_quad(plot_func_with_loss)
 
+
 # + [markdown] slideshow={"slide_type": "slide"} tags=[]
-# ### Gradient straty
+# ### Gradient funkcji straty
 #
 # W którą stronę iść?
 
 # + tags=[] slideshow={"slide_type": "skip"}
-from matplotlib import cm
+def loss_line(predict):
+    A = np.linspace(-2, 2, 50)    
+    Y_predicted = predict(A)(np.broadcast_to(x, A.shape + x.shape).transpose())
+    Y = np.broadcast_to(y, A.shape + y.shape).transpose()
 
-def loss_grid(predict):
-    A, B = np.meshgrid(
-        np.linspace(-2, 2, 20),
-        np.linspace(-2, 2, 20),
-    )
-    
-    Y_predicted = predict(A, B)(np.broadcast_to(x, A.shape + x.shape).transpose(2, 0, 1))
-    Y = np.broadcast_to(y, A.shape + y.shape).transpose(2, 0, 1)
+    return A, ((Y - Y_predicted)**2).mean(axis=0)
 
-    return A, B, ((Y - Y_predicted)**2).mean(axis=0)
-
-def plot_loss():
-    target_a, target_b, target_c = target_params
+def plot_loss(a, b, c):
+    y_predicted = quad(a,b,c)(x)
+    loss = mean_squared_error(y, y_predicted)
     
-    fig, (ab_ax, ac_ax, bc_ax) = plt.subplots(1 ,3, figsize=(15,5), subplot_kw=dict(projection="3d"))
+    print("loss =", loss)
     
-    ab_loss_grid = loss_grid(lambda a,b: quad(a,b,target_c))
-    ab_ax.plot_surface(*ab_loss_grid, alpha=0.5, cmap=cm.coolwarm)
-    ab_ax.contour(*ab_loss_grid, levels=30, cmap=cm.coolwarm)
-    ab_ax.scatter(target_a, target_b, 0, c="blue")
-    ab_ax.set_xlabel("a")
-    ab_ax.set_ylabel("b")
-    ab_ax.set_zlim(0, 30)
-    ab_ax.set_title("loss(a,b)")
+    _, (a_ax, b_ax, c_ax) = plt.subplots(1, 3, figsize=(12,2), sharey=True)
     
-    ac_loss_grid = loss_grid(lambda a,c: quad(a,target_b,c))
-    ac_ax.plot_surface(*ac_loss_grid, alpha=0.5, cmap=cm.coolwarm)
-    ac_ax.contour(*ac_loss_grid, levels=30, cmap=cm.coolwarm)
-    ac_ax.scatter(target_a, target_c, 0, c="blue")
-    ac_ax.set_xlabel("a")
-    ac_ax.set_ylabel("c")
-    ac_ax.set_zlim(0, 30)
-    ac_ax.set_title("loss(a,c)")
+    a_loss_line = loss_line(lambda a: quad(a, b, c))
+    a_ax.plot(*a_loss_line, c="C0")
+    a_ax.scatter(a, loss, c="C1")
+    a_ax.set_xlabel("a")
+    a_ax.set_ylabel("loss")
+    a_ax.set_ylim([-1, 30])
     
-    bc_loss_grid = loss_grid(lambda b,c: quad(target_a,b,c))
-    bc_ax.plot_surface(*bc_loss_grid, alpha=0.5, cmap=cm.coolwarm)
-    bc_ax.contour(*bc_loss_grid, levels=30, cmap=cm.coolwarm)
-    bc_ax.scatter(target_b, target_c, 0, c="blue")
-    bc_ax.set_xlabel("b")
-    bc_ax.set_ylabel("c")
-    bc_ax.set_zlim(0, 30)
-    bc_ax.set_title("loss(b,c)")
-
+    b_loss_line = loss_line(lambda b: quad(a, b, c))
+    b_ax.plot(*b_loss_line, c="C0")
+    b_ax.scatter(b, loss, c="C1")
+    b_ax.set_xlabel("b")
+        
+    c_loss_line = loss_line(lambda c: quad(a, b, c))
+    c_ax.plot(*c_loss_line, c="C0")
+    c_ax.scatter(c, loss, c="C1")
+    c_ax.set_xlabel("c")
+        
+    _, fit_ax = plt.subplots(figsize=(3,2))
+    fit_ax.scatter(x, y, s=3, c="C0")
+    fit_ax.plot(x, y_predicted, c="C1")
+    fit_ax.set_xlabel("x")
+    fit_ax.set_ylabel("y")
+        
     plt.show()
 
 
 # + tags=[]
-plot_loss()
+interactive_quad(plot_loss)
 
-# +
-from sympy import symbols, diff, simplify
 
-def sym_mean_squared_error(target, prediction):
-    target_values = list(target)
-    predicted_values = list(prediction)
+# + tags=[] slideshow={"slide_type": "skip"}
+def loss_with_gradient(a, b, c):
+    a = torch.tensor(a, requires_grad=True)
+    b = torch.tensor(b, requires_grad=True)
+    c = torch.tensor(c, requires_grad=True)
     
-    squared_errors = [
-        (target_values[i] - predicted_values[i])**2 
-        for i in range(len(target))
-    ]
+    y_predicted = quad(a, b, c)(torch.from_numpy(x))
     
-    return sum(squared_errors) / len(squared_errors)
-
-
-# -
-
-a, b, c = symbols("a b c")
-
-loss = sym_mean_squared_error(y, quad(a,b,c)(x))
-
-dloss_a, dloss_b, dloss_c = diff(loss, a), diff(loss, b), diff(loss, c)
-display(dloss_a, dloss_b, dloss_c)
-
-
-# +
-def gradient(a_val, b_val, c_val):    
+    loss = mean_squared_error(torch.from_numpy(y), y_predicted)
+    loss.backward()
+    
     return (
-        dloss_a.evalf(subs={a: a_val, b: b_val, c: c_val}),
-        dloss_b.evalf(subs={a: a_val, b: b_val, c: c_val}),
-        dloss_c.evalf(subs={a: a_val, b: b_val, c: c_val}),
+        y_predicted.detach().numpy(), 
+        loss.item(),
+        np.array([a.grad.item(), b.grad.item(), c.grad.item()])
     )
-    
-gradient(0.5, 0.75, 1)
-# +
-import torch
 
-def plot_func_with_loss_and_gradient(a,b,c):  
-    ta = torch.tensor(a, requires_grad=True)
-    tb = torch.tensor(b, requires_grad=True)
-    tc = torch.tensor(c, requires_grad=True)
+def plot_loss_gradient(a, b, c):
+    y_predicted, loss, grad = loss_with_gradient(a, b, c)
+    lr = (loss / grad ** 2).min()
     
-    ty = torch.from_numpy(y)
-    ty_predicted = quad(ta,tb,tc)(torch.from_numpy(x))
-    y_predicted = ty_predicted.detach().numpy()
+    print("loss     =", loss)
+    print("gradient =", tuple(grad))
     
-    plt_setup()
-    plt.scatter(x, y, s=3, c=plot_colors[0])
-    plt.plot(x, y_predicted, c=plot_colors[1])
+    _, (a_ax, b_ax, c_ax) = plt.subplots(1, 3, figsize=(12,2), sharey=True)
+    
+    a_ax.axline([a, loss], [a+1, loss+grad[0]], c="C0")
+    a_ax.quiver(a, loss, -lr * grad[0], 0, color="C1", angles='xy', scale_units='xy', scale=1)
+    a_ax.scatter(a, loss, c="C1")
+    a_ax.set_xlabel("a")
+    a_ax.set_ylabel("loss")
+    a_ax.set_xlim([-2, 2])
+    c_ax.set_ylim([-1, 30])
+    
+    b_ax.axline([b, loss], [b+1, loss+grad[1]], c="C0")
+    b_ax.quiver(b, loss, -lr * grad[1], 0, color="C1", angles='xy', scale_units='xy', scale=1)
+    b_ax.scatter(b, loss, c="C1")
+    b_ax.set_xlabel("b")
+    b_ax.set_xlim([-2, 2])
+        
+    c_ax.axline([c, loss], [c+1, loss+grad[2]], c="C0")
+    c_ax.quiver(c, loss, -lr * grad[2], 0, color="C1", angles='xy', scale_units='xy', scale=1)
+    c_ax.scatter(c, loss, c="C1")
+    c_ax.set_xlabel("c")
+    c_ax.set_xlim([-2, 2])
+    
+        
+    _, fit_ax = plt.subplots(figsize=(3,2))
+    fit_ax.scatter(x, y, s=3, c="C0")
+    fit_ax.plot(x, y_predicted, c="C1")
+    fit_ax.set_xlabel("x")
+    fit_ax.set_ylabel("y")
+        
     plt.show()
-    
-    tloss = mean_squared_error(ty, ty_predicted)
-    display(tloss.item())
-    
-    tloss.backward()
-    display((ta.grad.item(), tb.grad.item(), tc.grad.item()))
 
-
+# + tags=[]
+interactive_quad(plot_loss_gradient)
 # -
-
-interactive_quad(plot_func_with_loss_and_gradient)
 
 # ### Learning rate
 #
 # Jak szybko iść?
+
+
