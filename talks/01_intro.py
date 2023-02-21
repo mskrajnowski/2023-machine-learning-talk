@@ -30,7 +30,6 @@
 import ipywidgets as widgets
 from IPython.display import display
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
 
 
@@ -65,7 +64,7 @@ def interactive_quad_sliders():
 # + slideshow={"slide_type": "skip"}
 def interactive_quad():
     def render(a, b, c):
-        x = np.linspace(-2, 2, 200)
+        x = torch.linspace(-2, 2, 200)
         _, ax = plt.subplots(figsize=(4,3))
         ax.plot(x, quad(a,b,c)(x))
         ax.grid(True)
@@ -87,14 +86,14 @@ interactive_quad()
 # Let's generate a random quadratic function.
 # -
 
-target_params = tuple(np.random.uniform(-2, 2, 3))
+target_params = (torch.rand(3) * 4 - 2).tolist()
 target = quad(*target_params)
 print("(a, b, c) =", target_params)
 
 
 # + slideshow={"slide_type": "skip"}
 def plot_target():
-    x = np.linspace(-2, 2, 200)
+    x = torch.linspace(-2, 2, 200)
     _, ax = plt.subplots(figsize=(4,3))
     ax.plot(x, target(x))
     ax.grid(True)
@@ -107,15 +106,18 @@ plot_target()
 
 # + [markdown] slideshow={"slide_type": "slide"}
 # ...and sample some points from it with noise, so the data isn't perfect.
-# -
 
-x, _ = torch.sort(torch.from_numpy(np.random.uniform(-2, 2, 100)))
-y = target(x) + np.random.uniform(-0.1, 0.1, x.shape[0])
+# +
+x, _ = torch.sort(torch.rand(100) * 4 - 2)
+x = x.reshape(100, 1)
+y = target(x) + torch.randn_like(x) * 0.05
+
+x.shape, y.shape
 
 
 # + slideshow={"slide_type": "skip"}
 def plot_samples():
-    target_x = np.linspace(-2, 2, 200)
+    target_x = torch.linspace(-2, 2, 200)
     target_y = target(target_x)
     
     _, ax = plt.subplots(figsize=(4,3))
@@ -169,7 +171,7 @@ fit_visually()
 # -
 
 def mean_squared_error(target, prediction):
-    return ((target - prediction) ** 2).mean()
+    return ((target - prediction) ** 2).mean(axis=0)
 
 
 # + slideshow={"slide_type": "skip"} tags=[]
@@ -208,11 +210,10 @@ fit_with_loss()
 
 # + tags=[] slideshow={"slide_type": "skip"}
 def loss_line(predict):
-    A = np.linspace(-2, 2, 50)    
-    Y_predicted = predict(A)(np.broadcast_to(x, A.shape + x.shape).transpose())
-    Y = np.broadcast_to(y, A.shape + y.shape).transpose()
-
-    return A, ((Y - Y_predicted)**2).mean(axis=0)
+    a = torch.linspace(-2, 2, 50)
+    y_predicted = predict(a)(x)
+    
+    return a, mean_squared_error(y, y_predicted)
     
 def fit_with_loss_plots():
     def render(a, b, c):
@@ -279,22 +280,22 @@ def loss_with_gradient(a, b, c):
     loss.backward()
     
     return (
-        y_predicted.detach().numpy(), 
-        loss.detach().numpy(), 
-        params.grad.detach().numpy()
+        y_predicted.detach(), 
+        loss.detach(), 
+        params.grad.detach()
     )
 
 def fit_with_gradient():
     def render(a, b, c):
         y_predicted, loss, grad = loss_with_gradient(a, b, c)
         lr = (loss / grad ** 2).min()
-
-        print("loss     =", loss)
-        print("gradient =", tuple(grad))
+        
+        print("loss     =", loss.item())
+        print("gradient =", grad.tolist())
 
         _, (a_ax, b_ax, c_ax) = plt.subplots(1, 3, figsize=(12,2), sharey=True)
 
-        a_ax.axline([a, loss], [a+1, loss+grad[0]], c="C0")
+        a_ax.axline([a, loss.item()], [a+1, (loss+grad[0]).item()], c="C0")
         a_ax.quiver(a, loss, -lr * grad[0], 0, color="C1", angles='xy', scale_units='xy', scale=1)
         a_ax.scatter(a, loss, c="C1")
         a_ax.set_xlabel("a")
@@ -303,14 +304,14 @@ def fit_with_gradient():
         a_ax.set_ylim([0, None])
         a_ax.grid(True)
 
-        b_ax.axline([b, loss], [b+1, loss+grad[1]], c="C0")
+        b_ax.axline([b, loss.item()], [b+1, (loss+grad[1]).item()], c="C0")
         b_ax.quiver(b, loss, -lr * grad[1], 0, color="C1", angles='xy', scale_units='xy', scale=1)
         b_ax.scatter(b, loss, c="C1")
         b_ax.set_xlabel("b")
         b_ax.set_xlim([-2, 2])
         b_ax.grid(True)
 
-        c_ax.axline([c, loss], [c+1, loss+grad[2]], c="C0")
+        c_ax.axline([c, loss.item()], [c+1, (loss+grad[2]).item()], c="C0")
         c_ax.quiver(c, loss, -lr * grad[2], 0, color="C1", angles='xy', scale_units='xy', scale=1)
         c_ax.scatter(c, loss, c="C1")
         c_ax.set_xlabel("c")
@@ -343,17 +344,14 @@ fit_with_gradient()
 # We can now write the code which will do SGD for us and find our function parameters.
 # -
 
-def fit_sgd(epochs, learning_rate, init_params):
-    # generate random parameters between -2 and 2
-    params = torch.tensor(
-        np.random.uniform(-2, 2, 3) if init_params is None else init_params, 
-        requires_grad=True
-    )
+def fit_sgd(model, init_params, epochs, learning_rate):
+    # prepare params for calculating loss gradient
+    params = [param.clone().requires_grad_(True) for param in init_params]
     
     loss_history = []
     for _ in range(epochs):
         # evaluate our model
-        y_predicted = quad(*params)(x)
+        y_predicted = model(*params)(x)
 
         # calculate the loss and the loss gradient
         loss = mean_squared_error(y, y_predicted)
@@ -361,25 +359,27 @@ def fit_sgd(epochs, learning_rate, init_params):
 
         # move towards decreasing loss
         with torch.no_grad():
-            params.add_(-params.grad * learning_rate)
-            params.grad.zero_()
+            for param in params:
+                param.add_(-param.grad * learning_rate)
+                param.grad.zero_()
             
         loss_history.append(loss.item())
     
     # calculate final loss
-    y_predicted = quad(*params)(x)
+    y_predicted = model(*params)(x)
     loss = mean_squared_error(y, y_predicted)
     loss_history.append(loss.item())
     
-    return params.tolist(), loss.item(), loss_history
+    params = [param.detach() for param in params]
+    return params, loss.item(), loss_history
 
 
 # + slideshow={"slide_type": "skip"}
-def interactive_fit_sgd():
-    init_params = np.random.uniform(-2, 2, 3)
+def interactive_fit_quad_sgd():
+    init_params = torch.rand(3) * 4 - 2
     
     def render(epochs, learning_rate):
-        params, loss, loss_history = fit_sgd(epochs, learning_rate, init_params)
+        params, loss, loss_history = fit_sgd(quad, init_params, epochs, learning_rate)
         
         _, (loss_ax, fit_ax) = plt.subplots(1, 2, figsize=(8,3))
         
@@ -389,7 +389,7 @@ def interactive_fit_sgd():
         loss_ax.grid(True)
         
         fit_ax.scatter(x, y, s=3, c="C0", label="samples")
-        fit_ax.plot(x, quad(*params)(x), c="C1", label="guess")
+        fit_ax.plot(x, quad(*params)(x), c="C1", label="prediction")
         fit_ax.set_xlabel("x")
         fit_ax.set_ylabel("y")
         fit_ax.grid(True)
@@ -397,7 +397,7 @@ def interactive_fit_sgd():
         
         plt.show()
         
-        print("params =", params)
+        print("params =", [param.item() for param in params])
         print("target =", list(target_params))
         print("loss   =", loss)
         
@@ -429,7 +429,7 @@ def interactive_fit_sgd():
 # ...and if we run our SGD implementation it approximates the parameters pretty well.
 
 # + slideshow={"slide_type": "-"}
-interactive_fit_sgd()
+interactive_fit_quad_sgd()
 
 
 # + [markdown] slideshow={"slide_type": "slide"}
@@ -439,63 +439,153 @@ interactive_fit_sgd()
 
 # + [markdown] slideshow={"slide_type": "slide"}
 # We can approximate any function with a bunch of linear segments.
+
+# + slideshow={"slide_type": "skip"}
+def interactive_linear_approximation():
+    def render(segment_count):
+        segment_i = [*range(0, len(x) - 1, round((len(x) - 1) / segment_count)), len(x) - 1]
+        
+        _, ax = plt.subplots(figsize=(4,3))
+        
+        ax.scatter(x, y, s=3, c="C0", label="samples")
+        ax.plot(x[segment_i], y[segment_i], c="C1", label="approximation")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.grid(True)
+        ax.legend()
+        
+        plt.show()
+        
+    segment_count = widgets.IntSlider(
+        description="segments", 
+        value=3, 
+        min=1, 
+        max=30, 
+        step=1, 
+        continuous_update=False
+    )
+    
+    display(
+        segment_count,
+        widgets.interactive_output(render, dict(segment_count=segment_count))
+    )
+
+
 # -
 
-def linear(a, b):
-    return lambda x: a*x + b
+interactive_linear_approximation()
 
 
-def linear_model():
-    a = torch.randn(1, requires_grad=True)
-    b = torch.randn(1, requires_grad=True)
-    
-    def predict(x):
-        return linear(a, b)(x)
-    
-    return predict, [a, b]
+# + [markdown] slideshow={"slide_type": "slide"}
+# ...so what we should be able to do is generate a bunch of random linear functions and somehow combine them into a non-linear result.
+#
+# To introduce non-linear behavior we can use a Rectified Linear Unit (ReLU), which is just
+# -
 
-
-# + slideshow={"slide_type": "-"}
-def fit_model_sgd(model, epochs, learning_rate):
-    predict, params = model
-    
-    loss_history = []
-    for _ in range(epochs):
-        # evaluate our model
-        y_predicted = predict(x)
-
-        # calculate the loss and the loss gradient
-        loss = mean_squared_error(y, y_predicted)
-        loss.backward()
-
-        # move towards decreasing loss
-        with torch.no_grad():
-            for param in params:
-                param.add_(-param.grad * learning_rate)
-                param.grad.zero_()
-
-        loss_history.append(loss.item())
-    
-    # calculate final loss
-    y_predicted = predict(x)
-    loss = mean_squared_error(y, y_predicted)
-    loss_history.append(loss.item())
-    
-    return loss.item(), loss_history
+def relu(x):
+    return torch.max(x, torch.tensor(0))
 
 
 # + slideshow={"slide_type": "skip"}
-def interactive_fit_model_sgd(model):
-    predict, params = model
-    init_params = [param.detach().clone() for param in params]
+def plot_relu():
+    x = torch.tensor([-1, 0, 1]).reshape(3, 1)
+    y = relu(x)
     
-    def render(epochs, learning_rate):
-        with torch.no_grad():
-            for param, init_value in zip(params, init_params):
-                param.zero_()
-                param.add_(init_value)
+    _, ax = plt.subplots(figsize=(4,3))
+    ax.plot(x, y)
+    ax.set_xlim([-1, 1])
+    ax.set_ylim([-1, 1])
+    ax.grid(True)
+    plt.show()
+
+
+# -
+
+plot_relu()
+
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# We can pass our linear functions through ReLU and sum them up. 
+#
+# A weighted sum will give us more flexibility when combining our linear segments.
+
+# + slideshow={"slide_type": "skip"}
+def interactive_relu_weighted_sum():
+    def render(a1, b1, a2, b2, w1, w2, c):
+        x = torch.linspace(-2, 2, 200)
+        y1 = relu(a1 * x + b1)
+        y2 = relu(a2 * x + b2)
+        y = w1 * y1 + w2 * y2 + c
         
-        loss, loss_history = fit_model_sgd(model, epochs, learning_rate)
+        fig, ax = plt.subplots(figsize=(8,3), layout='constrained')
+        ax.plot(x, y1, label="relu(a1*x + b1)", c="C0")
+        ax.plot(x, y2, label="relu(a2*x + b2)", c="C2")
+        ax.plot(x, y, label="w1 * relu(a1*x + b1) + w2 * relu(a2*x + b2) + b", c="C1")
+        ax.grid(True)
+        ax.legend()
+        plt.show()
+    
+    slider_args = dict(
+        min=-10, 
+        max=10, 
+        step=0.05, 
+        continuous_update=False
+    )
+    
+    a1 = widgets.FloatSlider(description="a1", value=0.25, **slider_args)
+    a2 = widgets.FloatSlider(description="a2", value=1, **slider_args)
+    b1 = widgets.FloatSlider(description="b1", value=0.25, **slider_args)
+    b2 = widgets.FloatSlider(description="b2", value=-0.75, **slider_args)
+    w1 = widgets.FloatSlider(description="w1", value=1, **slider_args)
+    w2 = widgets.FloatSlider(description="w2", value=1, **slider_args)
+    c = widgets.FloatSlider(description="c", value=0.5, **slider_args)
+    
+    display(
+        widgets.HBox([a1, b1]),
+        widgets.HBox([a2, b2]),
+        widgets.HBox([w1, w2, c]),
+        widgets.interactive_output(render, dict(a1=a1, b1=b1, a2=a2, b2=b2, w1=w1, w2=w2, c=c))
+    )
+
+
+# -
+
+interactive_relu_weighted_sum()
+
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# Time to build our universal function.
+# -
+
+def universal_fn(a, b, w, c):
+    def f(x):
+        y = a * x + b
+        y = relu(y)
+        y = (y * w).sum(dim=1, keepdim=True) + c
+        return y
+        
+    return f
+
+
+# + slideshow={"slide_type": "skip"}
+def interactive_fit_universal_sgd():
+    last_segment_count = None
+    init_params = None
+    
+    def render(segment_count, epochs, learning_rate):
+        nonlocal last_segment_count, init_params
+        
+        if init_params is None or last_segment_count != segment_count:
+            init_params = [
+                torch.randn(segment_count),
+                torch.randn(segment_count),
+                torch.randn(segment_count),
+                torch.randn(1),
+            ]
+
+        last_segment_count = segment_count
+        
+        params, loss, loss_history = fit_sgd(universal_fn, init_params, epochs, learning_rate)
         
         _, (loss_ax, fit_ax) = plt.subplots(1, 2, figsize=(8,3))
         
@@ -505,7 +595,7 @@ def interactive_fit_model_sgd(model):
         loss_ax.grid(True)
         
         fit_ax.scatter(x, y, s=3, c="C0", label="samples")
-        fit_ax.plot(x, predict(x).detach(), c="C1", label="guess")
+        fit_ax.plot(x, universal_fn(*params)(x), c="C1", label="prediction")
         fit_ax.set_xlabel("x")
         fit_ax.set_ylabel("y")
         fit_ax.grid(True)
@@ -513,11 +603,19 @@ def interactive_fit_model_sgd(model):
         
         plt.show()
         
-        print("loss   =", loss)
+        print("loss =", loss)
         
+    segment_count = widgets.IntSlider(
+        description="segments", 
+        value=3, 
+        min=1, 
+        max=30, 
+        step=1, 
+        continuous_update=False
+    )
     epochs = widgets.IntSlider(
         description="epochs", 
-        value=15, 
+        value=30, 
         min=0, 
         max=100, 
         step=1, 
@@ -534,76 +632,15 @@ def interactive_fit_model_sgd(model):
     )
     
     display(
-        widgets.HBox([epochs, learning_rate]),
-        widgets.interactive_output(render, dict(epochs=epochs, learning_rate=learning_rate))
+        widgets.HBox([segment_count, epochs, learning_rate]),
+        widgets.interactive_output(render, dict(
+            segment_count=segment_count, 
+            epochs=epochs, 
+            learning_rate=learning_rate
+        ))
     )
 
 
 # -
 
-interactive_fit_model_sgd(linear_model())
-
-
-# +
-def relu(x):
-    return torch.max(x, torch.tensor(0))
-
-def nonlinear_model():
-    a1 = torch.randn((1, 50), requires_grad=True)
-    b1 = torch.randn(50, requires_grad=True)
-    a2 = torch.randn((50, 1), requires_grad=True)
-    b2 = torch.randn(1, requires_grad=True)
-    
-    def predict(x):
-        p = x.float().reshape(*x.shape, 1)
-        p = relu(p @ a1 + b1)
-        p = p @ a2 + b2
-        return p.reshape(*x.shape)
-        
-    return predict, [a1, b1, a2, b2]
-
-
-# -
-
-interactive_fit_model_sgd(nonlinear_model())
-
-
-def interactive_relu():
-    def render(a1, b1, a2, b2, a3, b3):
-        x = np.linspace(-2, 2, 200)
-        l1 = a1 * x + b1
-        l2 = a2 * np.maximum(l1, 0) + b2
-        l3 = a3 * np.maximum(l2, 0) + b3
-        
-        _, ax = plt.subplots(figsize=(4,3))
-        ax.plot(x, l1)
-        ax.plot(x, l2)
-        ax.plot(x, l3)
-        ax.grid(True)
-        plt.show()
-    
-    slider_args = dict(
-        min=-10, 
-        max=10, 
-        step=0.05, 
-        continuous_update=False
-    )
-    
-    a1 = widgets.FloatSlider(description="a1", value=1, **slider_args)
-    b1 = widgets.FloatSlider(description="b1", value=1, **slider_args)
-    a2 = widgets.FloatSlider(description="a2", value=1, **slider_args)
-    b2 = widgets.FloatSlider(description="b2", value=1, **slider_args)
-    a3 = widgets.FloatSlider(description="a3", value=1, **slider_args)
-    b3 = widgets.FloatSlider(description="b3", value=1, **slider_args)
-    
-    display(
-        widgets.HBox([a1, b1]),
-        widgets.HBox([a2, b2]),
-        widgets.HBox([a3, b3]),
-        widgets.interactive_output(render, dict(a1=a1, b1=b1, a2=a2, b2=b2, a3=a3, b3=b3))
-    )
-
-
-interactive_relu()
-
-
+interactive_fit_universal_sgd()
