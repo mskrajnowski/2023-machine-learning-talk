@@ -91,6 +91,8 @@ fonttools==4.38.0
     # via matplotlib
 fqdn==1.5.1
     # via jsonschema
+graphviz==0.20.1
+    # via -r requirements.in
 idna==3.4
     # via
     #   anyio
