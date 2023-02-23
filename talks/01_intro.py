@@ -108,9 +108,9 @@ plot_target()
 # ...and sample some points from it with noise, so the data isn't perfect.
 
 # +
-x, _ = torch.sort(torch.rand(100) * 4 - 2)
-x = x.reshape(100, 1)
-y = target(x) + torch.randn_like(x) * 0.05
+x, _ = torch.sort(torch.rand(200) * 4 - 2)
+x = x.reshape(200, 1)
+y = target(x) + torch.randn_like(x) * 0.02
 
 x.shape, y.shape
 
@@ -412,7 +412,7 @@ def interactive_fit_quad_sgd():
     learning_rate = widgets.FloatLogSlider(
         description="learning rate", 
         base=10,
-        value=0.2, 
+        value=0.1, 
         min=-3, 
         max=0, 
         step=0.05,
@@ -567,6 +567,11 @@ def universal_fn(a, b, w, c):
     return f
 
 
+# where `a`, `b` and `w` are vectors, which contain sets of parameters for each of our linear segments.
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# ...and here's how our model performs
+
 # + slideshow={"slide_type": "skip"}
 def interactive_fit_universal_sgd():
     last_segment_count = None
@@ -607,7 +612,7 @@ def interactive_fit_universal_sgd():
         
     segment_count = widgets.IntSlider(
         description="segments", 
-        value=3, 
+        value=5, 
         min=1, 
         max=30, 
         step=1, 
@@ -615,16 +620,16 @@ def interactive_fit_universal_sgd():
     )
     epochs = widgets.IntSlider(
         description="epochs", 
-        value=30, 
+        value=100, 
         min=0, 
-        max=100, 
+        max=1000, 
         step=1, 
         continuous_update=False
     )
     learning_rate = widgets.FloatLogSlider(
         description="learning rate", 
         base=10,
-        value=0.2, 
+        value=0.05, 
         min=-6, 
         max=0, 
         step=0.05,
@@ -644,3 +649,74 @@ def interactive_fit_universal_sgd():
 # -
 
 interactive_fit_universal_sgd()
+
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# We've just built the simplest neural network!
+# -
+
+def network(x):
+    y = x                                     # input layer
+    y = a * x + b                             # linear layer
+    y = relu(y)                               # activation
+    y = (y * w).sum(dim=1, keepdim=True) + c  # output layer
+    return y
+
+
+# + slideshow={"slide_type": "skip"}
+import graphviz
+
+def network_graph():
+    return graphviz.Source("""
+        digraph network {
+            rankdir=LR
+            splines=line
+            
+
+            node [fixedsize=true, shape=circle, style=solid];
+
+            subgraph cluster_input {
+                label="Input\nLayer"
+                labelloc="b"
+                color=transparent
+                
+                x;
+            }
+
+            subgraph cluster_hidden {
+                label="Hidden\nLinear\nLayer"
+                labelloc="b"
+                color=transparent
+                node[label=""]
+                nodesep=-1
+                
+                h1
+                h2
+                hellipsis [height=0.25, label="⋮", color="transparent"]
+                hn
+            }
+
+            subgraph cluster_output {
+                label="Output\nLayer"
+                labelloc="b"
+                color=transparent
+                
+                y;
+            }
+            
+            x -> h1
+            x -> h2
+            x -> hellipsis [style=invis]
+            x -> hn
+            
+            h1 -> y
+            h2 -> y
+            hellipsis -> y [style=invis]
+            hn -> y
+        }
+    """)
+
+
+# -
+
+network_graph()
