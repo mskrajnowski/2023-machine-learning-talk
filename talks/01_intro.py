@@ -697,7 +697,7 @@ def network_graph():
             }
 
             subgraph cluster_output {
-                label="Output\nLayer"
+                label="Output\nLinear\nLayer"
                 labelloc="b"
                 color=transparent
                 
@@ -720,3 +720,5 @@ def network_graph():
 # -
 
 network_graph()
+
+
