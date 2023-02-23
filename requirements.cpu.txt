@@ -50,6 +50,7 @@ charset-normalizer==3.0.1
     # via requests
 click==8.1.3
     # via
+    #   duckduckgo-search
     #   pip-tools
     #   typer
 comm==0.1.2
@@ -71,6 +72,8 @@ decorator==5.1.1
     # via ipython
 defusedxml==0.7.1
     # via nbconvert
+duckduckgo-search==2.8.0
+    # via -r requirements.in
 executing==1.2.0
     # via stack-data
 fastai==2.7.10
@@ -324,6 +327,7 @@ pickleshare==0.7.5
     # via ipython
 pillow==9.4.0
     # via
+    #   -r requirements.in
     #   fastai
     #   ipympl
     #   matplotlib
@@ -395,6 +399,7 @@ pyzmq==25.0.0
     #   notebook
 requests==2.28.2
     # via
+    #   duckduckgo-search
     #   fastai
     #   jupyterlab-server
     #   spacy
