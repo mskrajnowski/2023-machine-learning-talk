@@ -561,7 +561,7 @@ def universal_fn(a, b, w, c):
     def f(x):
         y = a * x + b
         y = relu(y)
-        y = (y * w).sum(dim=1, keepdim=True) + c
+        y = (w * y).sum(dim=1, keepdim=True) + c
         return y
         
     return f
@@ -655,24 +655,23 @@ interactive_fit_universal_sgd()
 # We've just built the simplest neural network!
 # -
 
-def network(x):
+def network_one_in_out(x):
     y = x                                     # input layer
     y = a * x + b                             # linear layer
     y = relu(y)                               # activation
-    y = (y * w).sum(dim=1, keepdim=True) + c  # output layer
+    y = (w * y).sum(dim=1, keepdim=True) + c  # output layer
     return y
 
 
 # + slideshow={"slide_type": "skip"}
 import graphviz
 
-def network_graph():
+def network_one_in_out_graph():
     return graphviz.Source("""
         digraph network {
             rankdir=LR
             splines=line
             
-
             node [fixedsize=true, shape=circle, style=solid];
 
             subgraph cluster_input {
@@ -687,8 +686,7 @@ def network_graph():
                 label="Hidden\nLinear\nLayer"
                 labelloc="b"
                 color=transparent
-                node[label=""]
-                nodesep=-1
+                node [label=""]
                 
                 h1
                 h2
@@ -719,6 +717,84 @@ def network_graph():
 
 # -
 
-network_graph()
+network_one_in_out_graph()
 
 
+# + [markdown] slideshow={"slide_type": "slide"}
+# To support multiple inputs we need to change `a` to a `inputs x neurons` matrix and add a weighted sum like we did for our output layer.
+#
+# To support multiple outputs we need to change `w` to a `neurons x outputs` matrix and `c` to a vector with `outputs` elements.
+#
+# Now our hidden and output layers look the same... because they are :) so let's rename the parameters for consistency.
+# -
+
+def network_multi_in_out(x):
+    y = x                                       # input layer
+    y = (w1 * x).sum(dim=1, keepdim=True) + b1  # linear layer
+    y = relu(y)                                 # activation
+    y = (w2 * y).sum(dim=1, keepdim=True) + b2  # output layer
+    return y
+
+
+# + slideshow={"slide_type": "skip"}
+import graphviz
+
+def network_multi_in_out_graph(hidden_layers=1):
+    graph = graphviz.Digraph(comment="network")
+    
+    graph.attr(rankdir="LR", splines="line")
+    graph.attr("node", label="", fixedsize="true", shape="circle", style="solid")
+    
+    def layer_cluster(name, prefix, label):
+        with graph.subgraph(name=f"cluster_{name}") as layer:
+            layer.attr(label=label, labelloc="b", color="transparent")
+            
+            layer.node(f"{prefix}1")
+            layer.node(f"{prefix}2")
+            layer.node(f"{prefix}ellipsis", label="⋮", height="0.25", color="transparent")
+            layer.node(f"{prefix}n")
+            
+    def layer_edges(from_prefix, to_prefix):
+        for from_suffix in ["1", "2", "n"]:
+            for to_suffix in ["1", "2", "n"]:
+                from_node = from_prefix + from_suffix
+                to_node = to_prefix + to_suffix
+                graph.edge(from_node, to_node)
+
+    layer_cluster(name="input", prefix="x", label="Input\nLayer")
+    
+    for i in range(1, hidden_layers + 1):
+        layer_cluster(name=f"hidden{i}", prefix=f"h{i}", label="Hidden\nLinear\nLayer")
+    
+    layer_cluster(name="output", prefix="y", label="Output\nLinear\nLayer")
+    
+    layer_edges(from_prefix="x",  to_prefix="h1")
+    
+    for i in range(1, hidden_layers):
+        layer_edges(from_prefix=f"h{i}", to_prefix=f"h{i+1}")
+    
+    layer_edges(from_prefix=f"h{hidden_layers}", to_prefix="y")
+    
+    return graph
+
+
+# -
+
+network_multi_in_out_graph()
+
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# We can also add more hidden layers... and so we enter deep learning
+# -
+
+def network_deep(x):
+    y = x                                       # input layer
+    y = (w1 * x).sum(dim=1, keepdim=True) + b1  # linear layer
+    y = relu(y)                                 # activation
+    y = (w2 * y).sum(dim=1, keepdim=True) + b2  # linear layer
+    y = relu(y)                                 # activation
+    y = (w3 * y).sum(dim=1, keepdim=True) + b3  # output layer
+    return y
+
+
+network_graph(hidden_layers=2)
