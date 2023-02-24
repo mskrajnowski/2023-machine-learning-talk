@@ -302,7 +302,7 @@ plot_target()
 # +
 x, _ = torch.sort(torch.rand(200) * 4 - 2)
 x = x.reshape(200, 1)
-y = target(x) + torch.randn_like(x) * 0.02
+y = target(x) + torch.randn_like(x) * 0.05
 
 x.shape, y.shape
 
@@ -989,7 +989,7 @@ def network_deep(x):
     return y
 
 
-network_graph(hidden_layers=2)
+network_multi_in_out_graph(hidden_layers=2)
 
 # + [markdown] slideshow={"slide_type": "slide"}
 # ## Time for questions
@@ -1003,6 +1003,7 @@ network_graph(hidden_layers=2)
 #
 # - Convolutional neural networks for image-based models
 # - Natural language processing, e.g. sentiment analysis
+# - ...
 # - Maybe how stable diffusion and/or GPT works?
 #
 # I'm open for ideas, so just ping me on Slack 😉
