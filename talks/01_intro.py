@@ -123,21 +123,57 @@ plt.rcParams.update({'font.size': 8})
 
 ClassificationInterpretation.from_learner(demo_learner).plot_confusion_matrix()
 
+
 # + [markdown] slideshow={"slide_type": "slide"}
 # Let's try it out
+
+# + slideshow={"slide_type": "skip"}
+def display_probabilities(categories, probabilities):
+    for category, probability in zip(categories, probabilities):
+        display(
+            widgets.HBox([
+                widgets.FloatProgress(value=probability, min=0, max=1, description=category),
+                widgets.Label("{0:.2%}".format(probability.item())),
+            ])
+        )
+
+
 # -
 
-test_image_widget = widgets.FileUpload(accept='image/jpeg', multiple=False, description="Upload a photo")
-test_image_widget
+def demo_classify(image):
+    category, _, probabilities = demo_learner.predict(image)
+    
+    print(category)
+    display(image.to_thumb(400))
+    display_probabilities(demo_dls.vocab, probabilities)
 
-# +
+
+# + slideshow={"slide_type": "skip"}
 from fastai.vision.core import PILImage
 import io
 
-test_image = PILImage.create(io.BytesIO(test_image_widget.value[0]["content"]))
-display(test_image.to_thumb(400))
-test_image_class, _, probabilities = demo_learner.predict(test_image)
-print(test_image_class, probabilities.max().item())
+def interactive_demo_classify():
+    def render(uploaded_files):
+        if not uploaded_files:
+            return
+        
+        uploaded_bytes = io.BytesIO(uploaded_files[0]["content"])
+        uploaded_image = PILImage.create(uploaded_bytes)
+        demo_classify(uploaded_image)
+    
+    upload_widget = widgets.FileUpload(
+        accept='image/jpeg', 
+        multiple=False, 
+        description="Upload a photo"
+    )
+    
+    display(upload_widget)
+    display(widgets.interactive_output(render, dict(uploaded_files=upload_widget)))
+
+
+# -
+
+interactive_demo_classify()
 
 
 # + [markdown] slideshow={"slide_type": "slide"}
