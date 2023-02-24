@@ -67,7 +67,7 @@ demo_path = Path("..") / "data" / "dog_vs_wolf_demo"
 # -
 
 if not demo_path.exists():
-    samples_per_class = 100
+    samples_per_class = 200
     download_images_of("gray wolf", dest=demo_path / "gray_wolf", max_results=samples_per_class)
     download_images_of("white wolf", dest=demo_path / "arctic_wolf", max_results=int(samples_per_class / 2))
     download_images_of("arctic wolf", dest=demo_path / "arctic_wolf", max_results=int(samples_per_class / 2))
@@ -79,7 +79,7 @@ if not demo_path.exists():
 
 # +
 from fastai.vision.data import ImageDataLoaders
-from fastai.vision.augment import Resize
+from fastai.vision.augment import Resize, aug_transforms
 
 demo_dls = ImageDataLoaders.from_path_func(
     demo_path,
@@ -88,6 +88,7 @@ demo_dls = ImageDataLoaders.from_path_func(
     valid_pct=0.2,
     seed=1432,
     item_tfms=[Resize(224)],
+    batch_tfms=aug_transforms(),
 )
 
 # + [markdown] slideshow={"slide_type": "fragment"}
@@ -106,7 +107,8 @@ from fastai.vision.models import resnet34
 from fastai.metrics import error_rate
 
 demo_learner = vision_learner(demo_dls, resnet34, metrics=error_rate)
-demo_learner.fine_tune(6, 0.0015)
+demo_learner.fine_tune(4, 0.0015)
+torch.cuda.empty_cache()
 
 # + [markdown] slideshow={"slide_type": "fragment"}
 # Seems to be doing pretty well for a couple seconds of training.
