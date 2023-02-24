@@ -127,32 +127,67 @@ ClassificationInterpretation.from_learner(demo_learner).plot_confusion_matrix()
 
 
 # + [markdown] slideshow={"slide_type": "slide"}
-# Let's try it out
-
-# + slideshow={"slide_type": "skip"}
-def display_probabilities(categories, probabilities):
-    for category, probability in zip(categories, probabilities):
-        display(
-            widgets.HBox([
-                widgets.FloatProgress(value=probability, min=0, max=1, description=category),
-                widgets.Label("{0:.2%}".format(probability.item())),
-            ])
-        )
-
-
+# If we have an image we can run it through our model like so...
 # -
 
 def demo_classify(image):
     category, _, probabilities = demo_learner.predict(image)
-    
-    print(category)
-    display(image.to_thumb(400))
-    display_probabilities(demo_dls.vocab, probabilities)
+    category_probabilities = dict(zip(demo_dls.vocab, probabilities.tolist()))
+    return category, category_probabilities
 
+
+test_image = PILImage.create(next(demo_path.glob("**/*.jpg")))
+display(test_image.to_thumb(200))
+demo_classify(test_image)
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# So let's test the model on some images
 
 # + slideshow={"slide_type": "skip"}
 from fastai.vision.core import PILImage
 import io
+
+def image_widget(image):
+    out = widgets.Output()
+    
+    with out:
+        display(image)
+        
+    return out
+
+# widgets.FloatProgress doesn't work with RISE, so here's a quick HTML progress bar
+def progress_widget(value):
+    return widgets.HTML(f"""
+      <div style="
+          position: relative; 
+          width: 200px; 
+          height: 20px; 
+          background: #eee; 
+          border-radius: 3px; 
+          overflow: hidden;
+          margin: 0 5px;
+      ">
+        <div style="
+            position: absolute; 
+            width: {value * 100}%; 
+            height: 100%; 
+            background: #348ceb"
+        ></div>
+      </div>
+    """)
+
+def probabilities_widget(probabilities):
+    cells = [
+        widget
+        for category, probability in probabilities.items()
+        for widget in (
+            widgets.Label(category),
+            progress_widget(probability),
+            widgets.Label("{0:.2%}".format(probability)),
+        )
+    ]
+    
+    return widgets.GridBox(cells, layout=widgets.Layout(grid_template_columns="repeat(3, 1fr)"))
 
 def interactive_demo_classify():
     def render(uploaded_files):
@@ -161,7 +196,16 @@ def interactive_demo_classify():
         
         uploaded_bytes = io.BytesIO(uploaded_files[0]["content"])
         uploaded_image = PILImage.create(uploaded_bytes)
-        demo_classify(uploaded_image)
+        category, probabilities = demo_classify(uploaded_image)
+        
+        display(widgets.HBox([
+            image_widget(uploaded_image.to_thumb(400)),
+            widgets.VBox([
+                widgets.HTML(f"<strong>{category}</strong>"),
+                probabilities_widget(probabilities),
+            ])
+        ]))
+
     
     upload_widget = widgets.FileUpload(
         accept='image/jpeg', 
@@ -171,8 +215,6 @@ def interactive_demo_classify():
     
     display(upload_widget)
     display(widgets.interactive_output(render, dict(uploaded_files=upload_widget)))
-
-
 # -
 
 interactive_demo_classify()
@@ -875,7 +917,7 @@ network_one_in_out_graph()
 #
 # To support multiple outputs we need to change `w` to a `neurons x outputs` matrix and `c` to a vector with `outputs` elements.
 #
-# Now our hidden and output layers look the same... because they are :) so let's rename the parameters for consistency.
+# Now our hidden and output layers look the same... because they are 🙂 so let's rename the parameters for consistency.
 # -
 
 def network_multi_in_out(x):
@@ -948,3 +990,31 @@ def network_deep(x):
 
 
 network_graph(hidden_layers=2)
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# ## Time for questions
+#
+# Is everyone asleep?
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# So now you know what neural networks are and how they work.
+#
+# Ideas for future talks:
+#
+# - Convolutional neural networks for image-based models
+# - Natural language processing, e.g. sentiment analysis
+# - Maybe how stable diffusion and/or GPT works?
+#
+# I'm open for ideas, so just ping me on Slack 😉
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# Links
+#
+# - https://course.fast.ai/ - most of my knowledge is based on their course and book
+# - https://docs.fast.ai/ - `fastai` documentation
+# - https://github.com/mskrajnowski/2023-machine-learning-talk
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# ## Thanks for listening
+#
+# See you next time!
