@@ -20,9 +20,9 @@
 # + [markdown] tags=[] slideshow={"slide_type": "slide"}
 # ## Plan
 #
-# 1. Fitting a simple function
-# 3. Handwritten digit recognition (MNIST)
-# 4. Plans for future talks
+# 1. Image classifier demo using `fastai`
+# 2. Implementing a network from scratch
+# 3. Plans for future talks
 
 # + slideshow={"slide_type": "skip"} tags=[]
 # %matplotlib inline
@@ -32,9 +32,121 @@ from IPython.display import display
 import matplotlib.pyplot as plt
 import torch
 
+# + [markdown] slideshow={"slide_type": "slide"}
+# ## Quick `fastai` demo
+#
+# Building AI models doesn't have to be hard
+
+# + slideshow={"slide_type": "skip"}
+from fastai.vision.utils import download_images, resize_images
+from duckduckgo_search import ddg_images
+from pathlib import Path
+import shutil
+
+def download_images_of(query, dest, max_results=10):
+    results = ddg_images(query, max_results=max_results)
+    urls = [result["image"] for result in results]
+    
+    tmp_path = Path(dest) / "tmp"
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    download_images(tmp_path, urls=urls)
+    resize_images(tmp_path, dest=dest, max_size=400, ext=".jpg", img_format="jpeg")
+    shutil.rmtree(tmp_path)
+
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# Let's try to create a husky vs wolf classifier. 
+#
+# First we need some photos of wolves and huskies, no problem, we can pull them from [duckduckgo](https://duckduckgo.com/?q=gray+wolf&t=h_&iax=images&ia=images).
+# -
+
+demo_path = Path("..") / "data" / "dog_vs_wolf_demo"
+
+# + slideshow={"slide_type": "skip"}
+# shutil.rmtree(demo_path, ignore_errors=True)
+# -
+
+if not demo_path.exists():
+    samples_per_class = 100
+    download_images_of("gray wolf", dest=demo_path / "gray_wolf", max_results=samples_per_class)
+    download_images_of("white wolf", dest=demo_path / "arctic_wolf", max_results=int(samples_per_class / 2))
+    download_images_of("arctic wolf", dest=demo_path / "arctic_wolf", max_results=int(samples_per_class / 2))
+    download_images_of("malamute", dest=demo_path / "malamute_husky", max_results=samples_per_class)
+    download_images_of("siberian husky", dest=demo_path / "siberian_husky", max_results=samples_per_class)
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# Next we need to tell `fastai` where the photos are, how they are labeled and how the data should be split into training and validation sets.
+
+# +
+from fastai.vision.data import ImageDataLoaders
+from fastai.vision.augment import Resize
+
+demo_dls = ImageDataLoaders.from_path_func(
+    demo_path,
+    list(demo_path.glob("**/*.jpg")),
+    label_func=lambda path: Path(path).parent.name,
+    valid_pct=0.2,
+    seed=1432,
+    item_tfms=[Resize(224)],
+)
+
+# + [markdown] slideshow={"slide_type": "fragment"}
+# ...and here's how our photos look like
+# -
+
+demo_dls.show_batch(max_n=8)
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# Now we can train our first model
+
+# +
+import fastai.vision.all
+from fastai.vision.learner import vision_learner
+from fastai.vision.models import resnet34
+from fastai.metrics import error_rate
+
+demo_learner = vision_learner(demo_dls, resnet34, metrics=error_rate)
+demo_learner.fine_tune(6, 0.0015)
+
+# + [markdown] slideshow={"slide_type": "fragment"}
+# Seems to be doing pretty well for a couple seconds of training.
+# -
+
+demo_learner.show_results(max_n=8)
+
+# + slideshow={"slide_type": "skip"}
+from fastai.interpret import Interpretation, ClassificationInterpretation
+
+plt.rcParams.update({'font.size': 6})
+Interpretation.from_learner(demo_learner).plot_top_losses(k=8)
+plt.rcParams.update({'font.size': 8})
+
+ClassificationInterpretation.from_learner(demo_learner).plot_confusion_matrix()
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# Let's try it out
+# -
+
+test_image_widget = widgets.FileUpload(accept='image/jpeg', multiple=False, description="Upload a photo")
+test_image_widget
+
+# +
+from fastai.vision.core import PILImage
+import io
+
+test_image = PILImage.create(io.BytesIO(test_image_widget.value[0]["content"]))
+display(test_image.to_thumb(400))
+test_image_class, _, probabilities = demo_learner.predict(test_image)
+print(test_image_class, probabilities.max().item())
+
+
+# + [markdown] slideshow={"slide_type": "slide"}
+# In a future talk I'll talk about what happened here, but for now we need to get to know the basics.
 
 # + [markdown] tags=[] slideshow={"slide_type": "slide"}
 # ## Fitting a simple function
+#
+# Math incoming...
 
 # + [markdown] slideshow={"slide_type": "slide"} tags=[]
 # For a simple example of how neural networks work, let's try to guess parameters of a quadratic function. 
