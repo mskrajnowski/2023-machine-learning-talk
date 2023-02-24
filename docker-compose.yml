@@ -6,6 +6,7 @@ x-common:
       - ./:/home/dev/workspace
       - dev_home:/home/dev
     working_dir: /home/dev/workspace
+    shm_size: '4gb'
 
 services:
   shell:
