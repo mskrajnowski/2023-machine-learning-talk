@@ -461,7 +461,7 @@ fit_with_loss_plots()
 # + [markdown] slideshow={"slide_type": "slide"}
 # We can calculate the slope of the loss function and move the parameters in the direction of decreasing loss.
 #
-# The slope at a given point is called a **gradient** and so we have re-invented **stochastic gradient descent**.
+# The slope at a given point is called a **gradient** and so we have re-invented **gradient descent**.
 
 # + tags=[] slideshow={"slide_type": "skip"}
 def loss_with_gradient(a, b, c):
@@ -989,7 +989,7 @@ def network_deep(x):
     return y
 
 
-network_multi_in_out_graph(hidden_layers=2)
+network_multi_in_out_graph(hidden_layers=3)
 
 # + [markdown] slideshow={"slide_type": "slide"}
 # ## Time for questions
