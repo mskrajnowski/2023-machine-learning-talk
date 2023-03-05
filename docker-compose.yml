@@ -4,6 +4,7 @@ x-common:
     command: bash
     volumes:
       - ./:/home/dev/workspace
+      - ./ipython_config.py:/home/dev/.ipython/profile_default/ipython_config.py
       - dev_home:/home/dev
     working_dir: /home/dev/workspace
     shm_size: '4gb'
