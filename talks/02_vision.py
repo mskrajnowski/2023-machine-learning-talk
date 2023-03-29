@@ -1,0 +1,424 @@
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.5'
+#       jupytext_version: 1.14.4
+#   kernelspec:
+#     display_name: Python 3 (ipykernel)
+#     language: python
+#     name: python3
+# ---
+
+# + tags=[] slideshow={"slide_type": "skip"}
+# %matplotlib inline
+
+# + [markdown] slideshow={"slide_type": "slide"} tags=[]
+# # Vision models
+#
+# Intro to image recognition with neural networks
+
+# + [markdown] slideshow={"slide_type": "slide"} tags=[]
+# ## Plan
+#
+# 1. Machine Learning
+# 2. MNIST dataset
+# 3. Preparing data for training
+# 4. Evaluating a model
+# 5. Testing various models
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Previously we've focused on how neural networks work at the low level and glossed over the overall machine learning process. In this talk we'll go over the whole process of building a model:
+#
+# - Downloading and exploring data
+# - Preparing training and validation sets
+# - Picking metrics to judge our models
+# - Experiments with various models
+# - Tweaks to make our models train faster
+#
+# We will try to create a model for handwritten digit recognition using the very popular [MNIST dataset](https://en.wikipedia.org/wiki/MNIST_database).
+#
+# > **Note:**
+# > For some reason the original link to MNIST dataset https://yann.lecun.com/exdb/mnist/ is asking for authentication, so I've linked to the Wikipedia article instead
+#
+# Links:
+# - https://yann.lecun.com/exdb/mnist/
+
+# + [markdown] tags=[] slideshow={"slide_type": "slide"}
+# ## Machine Learning
+#
+# Approach to solving tasks by learning an algorithm from examples.
+#
+# > Suppose we arrange for some automatic means of testing the effectiveness of any current weight assignment in terms of actual performance and provide a mechanism for altering the weight assignment so as to maximize the performance. We need not go into the details of such a procedure to see that it could be made entirely automatic and to see that a machine so programmed would "learn" from its experience.
+# >
+# > [Arthur L. Samuel, Artificial Intelligence: A Frontier of Automation, 1962](https://journals.sagepub.com/doi/abs/10.1177/000271626234000103)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Usually when we want the computer to do something we need to explain in detail what we want it to do. Computers are powerful, but really dumb, they will only do what we ask them to do... and that's fine for a lot of problems. However, there are problems we can't easily explain to a computer, because we don't really know what needs to be done to recognize a dog in an image.
+#
+# Arthur Samuel, an IBM researcher, proposed a different way of explaining tasks to computers, by providing examples of data and letting the computer figure the algorithm out.
+#
+# Links:
+# - https://nbviewer.org/github/fastai/fastbook/blob/master/01_intro.ipynb
+# - https://en.wikipedia.org/wiki/Machine_learning
+# - https://en.wikipedia.org/wiki/Arthur_Samuel_(computer_scientist)
+
+# + [markdown] tags=[] slideshow={"slide_type": "slide"}
+# Machine learning loop
+#
+# ![Machine learning loop](./images/machine_learning_loop.png)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# First off we need some examples of data that will be passed to our model, in the case of our husky/wolf classifier from the previous talk that would be the set of pictures of huskies and wolves that we downloaded.
+#
+# Depending on whether we know what these examples represent, what the expected outputs are, we split machine learning into:
+#
+# - supervised learning
+# - unsupervised learning
+#
+# We will focus on supervised learning for now and assume we have labeled examples. Once we have inputs and labels we need a way to measure the performance of any model we are going to try. Finally we can create a parametric model and optimize the parameters to maximize the performance on our examples.
+
+# + [markdown] slideshow={"slide_type": "slide"} tags=[]
+# ...which for neural networks becomes
+#
+# ![Neural network training loop](./images/neural_network_training_loop.png)
+
+# + [markdown] slideshow={"slide_type": "slide"} tags=[]
+# ## MNIST dataset
+#
+# A dataset of grayscale images of handwritten digits. `fastai` has utilities for downloading various well-known datasets, including MNIST.
+
+# + tags=[]
+from pathlib import Path
+from fastai.data.external import untar_data, URLs
+
+data_path = (Path("..") / "data").resolve()
+mnist_path = untar_data(url=URLs.MNIST, data=data_path)
+mnist_path
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Links:
+# - https://docs.fast.ai/data.external.html
+
+# + [markdown] slideshow={"slide_type": "slide"} tags=[]
+# Let's check what was downloaded
+
+# + tags=[]
+# !tree -L 2 -sh --du {mnist_path}
+
+# + tags=[]
+list((mnist_path / "training" / "5").iterdir())[:5]
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# We have 2 directories `training` and `testing`, each of which has 10 directories, 1 for each digit. Each of these directories in turn contain 28x28px grayscale images of handwritten digits. We can use the Python Imaging Library to view these images.
+
+# + tags=[]
+from PIL import Image
+
+Image.open(mnist_path / "training" / "5" / "19858.png")
+
+# + [markdown] slideshow={"slide_type": "slide"} tags=[]
+# ## Overfitting
+#
+# - Model that works great, but only on its training set
+# - One of the biggest problem in ML
+# - A model should learn general concepts
+# - Complex models have more capacity to overfit
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# So what's up with these `training` and `testing` directories? We want our model to learn from our examples so that it can be applied to new data in future. For example we want to show it photos of wolves and huskies, train it and then use it to classify new photos. However, during training our model will look for the easiest way to achieve its goal. If we gave it enough parameters to play with it could memorize our training set and be 100% accurate on it, while being completely useless in the real world.
+#
+# This is called overfitting and it doesn't have to be as extreme. In general it means our model is doing better on the training samples than on data it has never seen. This is probably the biggest common problem in ML and we have to take care to avoid it.
+#
+# First of all we need to be able to detect overfitting and so we split our labeled data into at least 2 sets: training and validation. Training set is only used for training and validation set is used to evaluate our model's performance on data it has never seen. This way we can compare metrics of our model on these sets and if they are considerably worse on the validation set our model might be overfitting.
+#
+# The easiest way to split the data is random sampling, e.g. select random 20% of your data and mark that as a validation set and leave the rest for training. However, there's a good chance this won't work depending on the task:
+#
+# - if we are predicting future stock prices, we should ensure that the validation set contains dates after the training set
+# - if we are classifying facial expressions, we might want to ensure the validation set contains pictures of different people than the training set
+#
+# MNIST dataset used to be used for comparing/benchmarking classifiers and so it provides ready to use training and validation (`testing`) sets, so we don't have to split the data ourselves. That said, if we had to, we should make sure that the validation set contains digits written by different people than the training set.
+
+# + [markdown] tags=[] slideshow={"slide_type": "slide"}
+# ## DataLoader
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Enough theory, let's load our training and validation sets. `pytorch` expects that datasets are defined using 2 classes:
+#
+# - `Dataset` - provides an iterator that returns pairs of raw inputs and labels
+# - `DataLoader` - loads inputs and labels from a `DataSet` transforms them into `pytorch` `Tensor`s and returns an iterator of evenly sized batches, so we can train a model one batch at a time
+#
+# `fastai` builds on top of that and provides the `DataBlock` class, which given an explanation of what our inputs and labels are, creates training and validation `Dataset`s and `DataLoader`s with sensible defaults and common transforms. To specify the shape of inputs and labels `fastai` provides various `Block` classes, we'll use:
+#
+# - `ImageBlock` - for our input images
+# - `CategoryBlock` - for digit labels
+
+# + tags=[]
+from fastai.data.all import DataBlock, CategoryBlock, FuncSplitter
+from fastai.vision.all import ImageBlock, PILImageBW
+
+mnist_block = DataBlock(
+    blocks=(ImageBlock(cls=PILImageBW), CategoryBlock),
+    n_inp=1,
+    get_items=lambda data_path: list(data_path.glob("*/*/*.png")),
+    get_y=lambda image_path: image_path.parent.name,
+    splitter=FuncSplitter(lambda image_path: image_path.parent.parent.name == "testing"),
+)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Now that we've explained to `fastai` how our dataset looks like...
+#
+# - `blocks` defines what kinds of data we have
+# - `n_inp` tells how many inputs we have, the rest will be treated as labels
+# - `get_items` describes how to get a list of all our images, provided a base path to our dataset
+# - `get_y` defines how to infer labels from image paths
+# - `spliter` defines how to split our images into training and validation sets
+#
+# ...we can ask it to create training and validation `DataLoader`s and explore how our samples look like
+
+# + tags=[] slideshow={"slide_type": "slide"}
+mnist_loaders = mnist_block.dataloaders(mnist_path, bs=64)
+mnist_loaders.train.show_batch(max_n=16, ncols=8, figsize=(8, 2.5))
+
+# + tags=[]
+x, y = mnist_loaders.train.one_batch()
+x.shape, y.shape
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# When creating a `DataLoader` we can specify a batch size `bs`, it defaults to `64`. We process data in batches, so that we don't have to hold the entire dataset in memory. For MNIST it's not that important, we could probably fit the entire set in memory without problems, but in general when working with bigger sets with more complex data we would quickly run out.
+#
+# `DataBlock.dataloaders()` creates both training and validation loaders, available under `.train` and `.valid` respectively. `fastai` `DataLoader`s also provide the `show_batch()` method to quickly inspect the data based on the `blocks` we passed to the `DataBlock`.
+#
+# Finally we can see that a batch contains 2 tensors each with 64 rows, which is our batch size. 
+#
+# The first tensor contains our image data, each image is 28x28 pixels and since they are grayscale we also have `1` for the number of color channels. If we worked with color, we would have `3` (RGB) channels.
+#
+# The second tensor contains our labels, not much to see here for now.
+
+# + [markdown] slideshow={"slide_type": "slide"} tags=[]
+# ## Baseline
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Before we start experimenting with various networks let's prepare a quick baseline for performance we'd like to beat. We can make a simple classifier that will compare an image to the average image of each digit and return the digit that's closest, e.g. using mean squared error of pixel values.
+#
+# So let's start with calculating images of average digits.
+
+# + tags=[] slideshow={"slide_type": "slide"}
+import torch
+
+def calc_mean_digits():
+    device = mnist_loaders.device
+    sums = torch.zeros(10, 1, 28, 28).to(device)
+    counts = torch.zeros(10).to(device)
+    
+    for x, y in mnist_loaders.train:
+        for category in range(10):
+            sums[category] += x[y == category].sum(dim=0)
+            counts[category] += (y == category).sum()
+    
+    return sums / counts.view(10, 1, 1, 1)
+
+
+# + tags=[]
+mean_digits = calc_mean_digits()
+mnist_loaders.show_batch((mean_digits, range(10)), max_n=10, ncols=5, figsize=(5, 2.5))
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Now we can build a baseline model that will compare inputs to the means and pick the digit which was closest.
+
+# + tags=[]
+from fastai.torch_core import TensorCategory
+
+def baseline(x):
+    distances = ((x - mean_digits.view(1, 10, 28, 28)) ** 2).mean(dim=(2, 3))
+    _, y = distances.min(dim=1)
+    return TensorCategory(y)
+
+
+# + tags=[]
+x, y = mnist_loaders.train.one_batch()
+mnist_loaders.show_results((x, y), baseline(x), max_n=16, ncols=8, figsize=(8, 2.5))
+
+
+# -
+
+# It seems to be working pretty well, let's calculate the accuracy over both the training and validation sets.
+
+# + tags=[]
+def model_accuracy(model, loader):
+    correct = sum((y == model(x)).sum() for x, y in loader).item()
+    total = len(loader.dataset)
+    return correct / total
+
+train_accuracy = model_accuracy(baseline, mnist_loaders.train)
+valid_accuracy = model_accuracy(baseline, mnist_loaders.valid)
+train_accuracy, valid_accuracy
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Now we know that whatever model we choose, it has to have at least 82% accuracy, otherwise we might as well use our baseline model. 
+# -
+
+# ## Regression
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Now that we have a baseline we can start experimenting with various models. We have a 28x28 image as input and 1 number (the digit) as the output, so it's tempting to go with a model like:
+
+# + tags=[]
+from torch import nn
+
+linear_regression = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(28 * 28, 1),
+)
+# -
+
+# `Flatten` reshapes the input so instead of being `28x28` it's just a vector of length `28 * 28`.
+#
+# `Linear` creates a linear layer with random weights and biases `wx + b`, just like we created from scratch in the previous talk. Its arguments are numbers of inputs and outputs.
+#
+# Finally `Sequential` just combines layers, so that first we `Flatten` our images and then pass it through the `Linear` layer.
+#
+# The output of our network will be a single floating-point number, which we will round to the closest integer later. We could round it as part of the network, but that would result in our loss function being mostly flat with zero gradients. That's because changing parameters might result in the exact same output and as such, same loss as before the change, so gradient descent would not work.
+#
+# Predicting a continuous value is called regression and so I've named our first network the `linear_regression` model. Predicting a category is called classification and we'll get to that later.
+
+# + tags=[]
+from fastai.learner import Learner
+from fastai.losses import MSELossFlat
+
+def mnist_regression_learner(model):
+    def accuracy(pred, target):
+        return (pred.round() == target).float().mean()
+    
+    return Learner(
+        dls=mnist_loaders,
+        model=model,
+        loss_func=MSELossFlat(),
+        metrics=[accuracy]
+    )
+
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# To train a network with `fastai` we use the `Learner` class, it has a bunch of different parameters, but the most important are:
+#
+# - `dls` - our `DataLoaders` instance, which will provide training and validation data
+# - `model` - the model we want to train
+# - `loss_func` - loss function we want to minimize, for regression mean squared error is a safe choice
+# - `metrics` - additional metrics we want to measure on the validation set while training
+#
+# Once we've instantiated a `Learner`, we can start training using `fit` or `fit_one_cycle` methods. I won't go into the differences for now, but `fit_one_cycle` is faster 😉. We have to give it the number of epochs (how many times we want to repeat training over the full training set) and the learning rate.
+#
+# The `Learner` class provides a `lr_find()` method, which tries a bunch of learning rates and suggests one for us, so let's try that first.
+
+# + tags=[]
+mnist_regression_learner(linear_regression).lr_find()
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# In general we want to pick the point where the loss is smooth and pointing down, which should hopefully give us a smooth loss decrease during training.
+
+# + tags=[]
+mnist_regression_learner(linear_regression).fit_one_cycle(5, 0.005)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Well, that's not very encouraging, the model seems pretty terrible with less than 25% accuracy, so only slightly better than random choice. Let's review some results.
+
+# + tags=[]
+x, y = mnist_loaders.valid.new(shuffle=True, bs=16).one_batch()
+y_pred = linear_regression(x).round().int().view(16)
+
+mnist_loaders.show_results((x, y), y_pred.clip(0, 9), max_n=16, ncols=8, figsize=(8, 2.5))
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# So one of the problems we see here is that our model doesn't know that predictions have to be between `0` and `9`, so every now and then it will return an invalid prediction of `-1` or `10`... the latter has a side effect of `show_results` crashing as well...
+#
+# We could move the `.clip(0, 9)` to the model, but again, that would introduce regions with zero gradients, so we need a smooth function that would do something similar. Luckily there's a `sigmoid` function, which maps any value to `(0, 1)` range.
+
+# + tags=[]
+from matplotlib import pyplot as plt
+
+x = torch.linspace(-6, 6, 100)
+plt.plot(x, torch.sigmoid(x))
+plt.show()
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# We need `[0, 9]` instead of `(0, 1)`, but that's fairly easy, we can just multiply the output, that's what the `SigmoidRange` layer from `fastai` does.
+
+# + tags=[]
+from fastai.layers import SigmoidRange
+
+linear_regression_sigmoid = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(28 * 28, 1),
+    SigmoidRange(-0.5, 9.5),
+)
+
+# + [markdown] tags=[] slideshow={"slide_type": "notes"}
+# Let's train it and see if that helps
+
+# + tags=[]
+mnist_regression_learner(linear_regression_sigmoid).fit_one_cycle(5, 0.005)
+
+# + tags=[]
+x, y = mnist_loaders.valid.new(shuffle=True, bs=16).one_batch()
+y_pred = linear_regression_sigmoid(x).round().int().view(16)
+
+mnist_loaders.show_results((x, y), y_pred, max_n=16, ncols=8, figsize=(8, 2.5))
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Well it's still just as terrible as it was, but at least we no longer have to `.clip()`... maybe we just need a more complex model.
+
+# + tags=[]
+linear_deep_regression = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(28 * 28, 128),
+    nn.ReLU(),
+    nn.Linear(128, 1),
+    SigmoidRange(-0.5, 9.5),
+)
+
+# + tags=[]
+mnist_regression_learner(linear_deep_regression).fit_one_cycle(5, 0.005)
+
+# + tags=[]
+x, y = mnist_loaders.valid.new(shuffle=True, bs=16).one_batch()
+y_pred = linear_deep_regression(x).round().int().view(16)
+
+mnist_loaders.show_results((x, y), y_pred, max_n=16, ncols=8, figsize=(8, 2.5))
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Now we're getting somewhere! That said, we are still under our baseline.
+
+# +
+x, y = mnist_loaders.valid.new(shuffle=True, bs=16).one_batch()
+y_pred = linear_deep_regression(x).round().int().view(16)
+
+mnist_loaders.show_results((x, y), y_pred, max_n=16, ncols=8, figsize=(8, 2.5))
+# -
+
+# ## Linear models
+
+# + tags=[]
+from torch import nn
+
+linear1 = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(28 * 28, 10),
+)
+
+# + tags=[]
+from fastai.losses import CrossEntropyLossFlat
+from fastai.metrics import accuracy
+
+def mnist_learner(model):
+    return Learner(
+        dls=mnist_loaders,
+        model=model,
+        loss_func=CrossEntropyLossFlat(),
+        metrics=[accuracy],
+    )
+
+
+# + tags=[]
+mnist_learner(linear1).fit_one_cycle(5, 0.05)
