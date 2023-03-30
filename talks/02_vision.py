@@ -48,6 +48,11 @@ def show_images(
         show_image(image, ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, **kwargs)
 
 
+# + tags=[] slideshow={"slide_type": "skip"}
+def param_count(module):
+    return sum(param.numel() for param in module.parameters())
+
+
 # + [markdown] slideshow={"slide_type": "slide"} tags=[]
 # # Vision models
 #
@@ -592,3 +597,20 @@ mnist_learner(linear3).fit_one_cycle(5, 0.01)
 # -
 
 # ## Convolutions
+
+# + tags=[]
+conv1 = nn.Sequential(
+    nn.Conv2d(1, 8, 3, stride=2),
+    nn.ReLU(),
+    nn.Conv2d(8, 16, 3, stride=2),
+    nn.ReLU(),
+    nn.Conv2d(16, 32, 3, stride=2),
+    nn.ReLU(),
+    nn.Conv2d(32, 10, 2),
+    nn.Flatten(),
+)
+
+mnist_learner(conv1).fit_one_cycle(5, 0.01)
+# -
+
+param_count(linear2), param_count(conv1)
