@@ -12,8 +12,41 @@
 #     name: python3
 # ---
 
+# + [markdown] slideshow={"slide_type": "skip"} tags=[]
+# # Setup
+
 # + tags=[] slideshow={"slide_type": "skip"}
 # %matplotlib inline
+
+# + tags=[] slideshow={"slide_type": "skip"}
+import math
+from matplotlib import pyplot as plt
+from fastai.torch_core import show_image
+
+def show_images(
+    images, 
+    ncols=None, 
+    nrows=None, 
+    cmap="coolwarm", 
+    vmin=None, 
+    vmax=None, 
+    vrange=0.5, 
+    figsize=None, 
+    **kwargs
+):
+    ncols = ncols or len(images)
+    nrows = math.ceil(len(images) / ncols)
+    
+    abs_max = images.abs().max()
+    vmin = vmin if vmin is not None else -abs_max * vrange
+    vmax = vmax if vmax is not None else +abs_max * vrange
+
+    figsize = figsize or (ncols, nrows)
+    fig, axs = plt.subplots(nrows, ncols, figsize=figsize)
+    
+    for image, ax in zip(images, axs.flat):
+        show_image(image, ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, **kwargs)
+
 
 # + [markdown] slideshow={"slide_type": "slide"} tags=[]
 # # Vision models
@@ -340,6 +373,7 @@ from matplotlib import pyplot as plt
 
 x = torch.linspace(-6, 6, 100)
 plt.plot(x, torch.sigmoid(x))
+plt.grid(True)
 plt.show()
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
@@ -388,28 +422,93 @@ y_pred = linear_deep_regression(x).round().int().view(16)
 mnist_loaders.show_results((x, y), y_pred, max_n=16, ncols=8, figsize=(8, 2.5))
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
-# Now we're getting somewhere! That said, we are still under our baseline.
+# Now we're getting somewhere! That said, we are still very much under our baseline.
+#
+# We could probably make the model even more complex, with more neurons and/or layers, but we might be able to do better by changing our approach instead.
 
-# +
-x, y = mnist_loaders.valid.new(shuffle=True, bs=16).one_batch()
-y_pred = linear_deep_regression(x).round().int().view(16)
+# + [markdown] slideshow={"slide_type": "slide"} tags=[]
+# ## Classification
 
-mnist_loaders.show_results((x, y), y_pred, max_n=16, ncols=8, figsize=(8, 2.5))
-# -
-
-# ## Linear models
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# The problem with our approach so far is that we have been using a regression model for classification. We don't need to estimate the value of the digit, we just want to know which digit it is. Predicting the value makes it harder for the model to figure out similar looking numbers as their values might not be similar at all. For example `1` and `7` can look very similar, but if our model is 50/50 about which it is it will land at `4`, which looks completely different.
+#
+# What we could do instead is try to predict 10 probabilities, one for each digit, and pick the one with the highest probability. Let's go back to our simplest model and just change the number of outputs to 10.
 
 # + tags=[]
-from torch import nn
-
 linear1 = nn.Sequential(
     nn.Flatten(),
     nn.Linear(28 * 28, 10),
 )
 
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# We need to also change our training procedure.
+#
+# First off, we need to change our target, so its shape matches our output. We want the model to learn to predict probabilities and during training we know exactly which digit it is, so we can turn each target digit into a vector with a single 1 (100% probability) and 9 0s for other digits. This is called one-hot encoding.
+
+# + tags=[]
+from torch.nn.functional import one_hot
+
+one_hot(torch.tensor(3), num_classes=10)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Let's try training our new model.
+
+# + tags=[]
+from torch.nn.functional import mse_loss, one_hot
+from fastai.metrics import accuracy
+
+def mnist_learner(model):
+    def loss(pred, target):
+        encoded_target = one_hot(target, num_classes=10).float()
+        return mse_loss(pred, encoded_target)
+    
+    return Learner(
+        dls=mnist_loaders,
+        model=model,
+        loss_func=loss,
+        metrics=[accuracy],
+    )
+
+
+# + tags=[]
+mnist_learner(linear1).fit_one_cycle(5, 0.005)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# With this tiny change we have now beaten our baseline model which had accuracy of around 82% 🏆
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Mean-squared error works great for regression, but for classification, where we predict probabilities there's cross-entropy loss, and it looks like:
+#
+# $\text{CrossEntropyLoss}(x,t) = \text{NLLLoss}(\text{Softmax}(x), t)$
+#
+# where:
+#
+# $\text{Softmax}(x_{i}) = \frac{\exp(x_i)}{\sum_j \exp(x_j)}$
+#
+# $\text{NLLLoss}(x, t) = -log(x_t)$
+#
+# `Softmax` makes sure that our predictions are in the `[0,1]` range and that they sum up to `1` like real probabilities.
+#
+# `NLLLoss` is negative log likelihood loss and all it does is just take the `-log()` of our prediction for the target class. That also means that it ignores our predictions for the other classes, as opposed to mean-squared error loss.
+#
+# Enough math, let's see if changing the loss function helps.
+#
+# Links:
+# - https://en.wikipedia.org/wiki/Cross_entropy
+# - https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
+# - https://pytorch.org/docs/stable/generated/torch.nn.Softmax.html
+# - https://pytorch.org/docs/stable/generated/torch.nn.NLLLoss.html
+
+# + tags=[]
+from matplotlib import pyplot as plt
+
+x = torch.linspace(0, 1, 100)
+plt.plot(x, -x.log())
+plt.grid(True)
+plt.show()
+
 # + tags=[]
 from fastai.losses import CrossEntropyLossFlat
-from fastai.metrics import accuracy
 
 def mnist_learner(model):
     return Learner(
@@ -421,4 +520,75 @@ def mnist_learner(model):
 
 
 # + tags=[]
+linear1 = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(28 * 28, 10),
+)
+
 mnist_learner(linear1).fit_one_cycle(5, 0.05)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Another step in the right direction 🏆
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Because we have a single weight for each pixel for each digit, we can view the learned weights to see what our network looks for in each digit.
+
+# + tags=[]
+show_images(linear1[1].weight.view(10, 1, 28, 28), ncols=5, vrange=0.2)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Warm colors represent positive weights and cold negative ones. This means that the network expects lines to be where the red spots are and doesn't want lines in blue spots.
+#
+# You can clearly see blue outlines of numbers and some red spots, which are characteristic to each digit. For example it seems that when there's a line in the top right that does not go down, that's a good predictor of a `5`.
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Let's see where we can get with a deeper network.
+
+# + tags=[]
+linear2 = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(28 * 28, 128),
+    nn.ReLU(),
+    nn.Linear(128, 10),
+)
+
+mnist_learner(linear2).fit_one_cycle(5, 0.01)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Just 2% error rate, another huge jump in accuracy. Now that we are getting very close to 100%, let's review cases where the model has problems. `fastai` offers a couple helpers for intepreting the results. We can start with showing the samples that we are most incorrect about, that have the highest losses.
+
+# + tags=[]
+from fastai.interpret import Interpretation
+
+Interpretation.from_learner(mnist_learner(linear2)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# As you can see we are very much in the MNIST hard mode. Some of these a human would have problems with as well.
+#
+# We can also plot a confusion matrix, which shows how many digits we are mislabeling and how. On the diagonal we see correct labels, everywhere else there are errors.
+
+# + tags=[]
+from fastai.interpret import ClassificationInterpretation
+
+ClassificationInterpretation.from_learner(mnist_learner(linear2)).plot_confusion_matrix()
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Again, we can try brute-forcing the problem and just adding more complexity to the network.
+
+# + tags=[]
+linear3 = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(28 * 28, 256),
+    nn.ReLU(),
+    nn.Linear(256, 128),
+    nn.ReLU(),
+    nn.Linear(128, 10),
+)
+
+mnist_learner(linear3).fit_one_cycle(5, 0.01)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# However, it seems that we need to change our approach again if we want to solve these last 2%.
+# -
+
+# ## Convolutions
