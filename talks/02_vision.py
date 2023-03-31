@@ -1,6 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: py:light,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: light
@@ -598,6 +599,115 @@ mnist_learner(linear3).fit_one_cycle(5, 0.01)
 
 # ## Convolutions
 
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# There are a couple problems with our previous models:
+#
+# 1. The model will only work with 28x28 images
+# 2. The number of parameters is proportional to the number of pixels
+#
+# `fastai` `Learner` has a `summary()` method to review inputs, outputs and numbers of parameters of each layer
+
+# + tags=[]
+mnist_learner(linear2).summary()
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Even though we have a relatively simple model and just 28x28px images, we've already gathered over 100k parameters. This would clearly not scale to normal images or photos, where we might want to use 512x512px images with 3 color channels.
+
+# + tags=[]
+format(param_count(
+    nn.Sequential(
+        nn.Flatten(),
+        nn.Linear(3 * 512 * 512, 128),
+        nn.ReLU(),
+        nn.Linear(128, 10),
+    )
+), ",")
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# 100M parameters even without increasing the number of neurons in the hidden layer. We need a different way to process images of arbitrary size. 
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Luckily people have been processing images for decades and so we can draw inspiration from that. Common image filters such as blur or sharpen use convolution under the hood. Filters like these define a matrix, called kernel, that is applied for each pixel by placing the center of the kernel at the given pixel, multiplying surrounding pixel values by corresponding weights in the kernel and summing them all up to create a new value for the pixel.
+
+# + tags=[]
+from itertools import product
+from torch.nn.functional import pad
+
+def simple_conv2d(image, kernel):
+    channels, h, w = image.shape
+    kh, kw = kernel.shape
+    assert kh % 2 == 1 and kw % 2 == 1, "even kernel dimensions are unsupported"
+    
+    pad_y, pad_x = kh // 2, kw // 2
+    padded_image = pad(image, (pad_x, pad_x, pad_y, pad_y), mode='replicate')
+    
+    output = torch.zeros(image.shape)
+    
+    for kx, ky in product(range(kh), range(kw)):
+        output += padded_image[:, ky:ky+h, kx:kx+w] * kernel[ky, kx]
+    
+    return output.clip(0, 1)
+
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Let's experiment on a picture of a [giant rubber duck](https://thebigduck.us/)... beacause why not 😉
+#
+# Links:
+# - https://thebigduck.us/
+
+# + tags=[]
+from fastai.vision.all import PILImage
+
+big_duck_image = PILImage.create("./images/big-duck.jpg").to_thumb(390)
+print(big_duck_image.size)
+big_duck_image
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# We can convert it into a tensor with a `ToTensor` transform.
+#
+# Links:
+# - https://pytorch.org/vision/stable/generated/torchvision.transforms.ToTensor.html?highlight=totensor#torchvision.transforms.ToTensor
+
+# + tags=[]
+from torchvision.transforms import ToTensor
+
+big_duck = ToTensor()(big_duck_image)
+show_image(big_duck)
+big_duck.shape
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# To blur the image we can create a kernel that will calculate the mean of surrounding pixels, e.g.
+
+# + tags=[]
+torch.ones(3, 3) / 9
+
+
+# -
+
+# or in general
+
+# + tags=[]
+def blur_kernel(size=3):
+    return torch.ones(size, size) / size / size
+
+show_image(simple_conv2d(big_duck, blur_kernel(5)))
+
+
+# -
+
+# Sharpening is a bit more complicated, we need to boost the value for the center pixel and then subtract the blur. A kernel that just returns the original pixel and ignores the surroundings is called an identity kernel and we'll use it to boost the center pixel.
+
+# + tags=[]
+def identity_kernel(size=3):
+    identity = torch.zeros(size, size)
+    identity[size // 2, size // 2] = 1
+    return identity
+
+def sharpen_kernel(size=3):
+    return 2 * identity_kernel(size) - blur_kernel(size)
+
+show_image(simple_conv2d(big_duck, sharpen_kernel(5)))
+
 # + tags=[]
 conv1 = nn.Sequential(
     nn.Conv2d(1, 8, 3, stride=2),
@@ -614,3 +724,6 @@ mnist_learner(conv1).fit_one_cycle(5, 0.01)
 # -
 
 param_count(linear2), param_count(conv1)
+
+# + tags=[]
+Interpretation.from_learner(mnist_learner(conv1)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
