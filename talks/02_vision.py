@@ -38,7 +38,7 @@ def show_images(
     ncols = ncols or len(images)
     nrows = math.ceil(len(images) / ncols)
     
-    abs_max = images.abs().max()
+    abs_max = max(image.abs().max() for image in images)
     vmin = vmin if vmin is not None else -abs_max * vrange
     vmax = vmax if vmax is not None else +abs_max * vrange
 
@@ -627,70 +627,143 @@ format(param_count(
 # 100M parameters even without increasing the number of neurons in the hidden layer. We need a different way to process images of arbitrary size. 
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
-# Luckily people have been processing images for decades and so we can draw inspiration from that. Common image filters such as blur or sharpen use convolution under the hood. Filters like these define a matrix, called kernel, that is applied for each pixel by placing the center of the kernel at the given pixel, multiplying surrounding pixel values by corresponding weights in the kernel and summing them all up to create a new value for the pixel.
+# Luckily people have been processing images for decades and so we can draw inspiration from that. Common image filters such as blur or sharpen use convolution under the hood. Filters like these calculate the color of the output pixel by multiplying the corresponding input pixel and its surroundings by a matrix and summing the values up. This matrix is called a convolution kernel. 
+#
+# Let's visualize how that works with a simple blur kernel, which just averages out surrounding pixels.
+
+# + tags=[] slideshow={"slide_type": "skip"}
+import ipywidgets as widgets
+from torch.nn.functional import conv2d
+from torchvision.transforms import ToTensor
+from IPython.display import display
+from matplotlib import pyplot as plt
+
+def interactive_conv2d(image, kernel):
+    image_height, image_width = image.shape[1:]
+    
+    def render(padding=0, stride=1, step=1):
+        output, = conv2d(
+            image.view(1, *image.shape), 
+            kernel.view(1, 1, *kernel.shape).float(),
+            padding=padding,
+            stride=stride,
+        )
+        output_height, output_width = output.shape[1:]
+        step_slider.max = output.numel()
+        
+        step = min(step, step_slider.max)
+        index = step - 1
+        
+        fig, (image_ax, output_ax) = plt.subplots(1, 2)
+        
+        image_ax.set_xlim(-padding, image_width + padding)
+        image_ax.set_ylim(image_height + padding, -padding)
+        image_ax.set_facecolor("black")
+        
+        image_ax.imshow(
+            image.permute(1, 2, 0), 
+            cmap="gray", 
+            extent=(0, image_width, image_height, 0),
+            vmin=0,
+            vmax=1,
+        )
+        image_ax.add_patch(plt.Rectangle(
+            xy=(
+                (index % output_width) * stride - padding,
+                (index // output_width) * stride - padding,
+            ),
+            width=kernel.shape[1],
+            height=kernel.shape[0],
+            fill=False,
+            color="red",
+        ))
+        image_ax.set_title("input")
+        
+        output_ax.imshow(
+            output.permute(1, 2, 0),
+            cmap="gray",
+            extent=(0, output_width, output_height, 0),
+            vmin=0,
+            vmax=1,
+        )
+        output_ax.add_patch(plt.Rectangle(
+            xy=(index % output_width, index // output_width),
+            width=1,
+            height=1,
+            fill=False,
+            color="red",
+        ))
+        output_ax.set_title("output")
+
+    padding_slider = widgets.IntSlider(min=0, max=2, value=0, description="padding")
+    stride_slider = widgets.IntSlider(min=1, max=3, value=1, description="stride")
+    step_slider = widgets.IntSlider(min=1, max=1, value=1, description="step")
+    
+    display(widgets.HBox([
+        widgets.VBox([padding_slider, stride_slider]),
+        step_slider,
+    ]))
+    
+    interactive_output = widgets.interactive_output(render, dict(
+        padding=padding_slider,
+        stride=stride_slider,
+        step=step_slider,
+    ))
+    interactive_output.layout.height = '350px'
+    
+    display(interactive_output)
+
 
 # + tags=[]
-from itertools import product
-from torch.nn.functional import pad
+kernel = torch.tensor([
+    [1, 1, 1],
+    [1, 1, 1],
+    [1, 1, 1],
+]) / 9
+
+# + tags=[]
+interactive_conv2d(
+    image=ToTensor()(PILImageBW.create("./images/codequest_tiny.png")),
+    kernel=kernel,
+)
+
+# + tags=[] slideshow={"slide_type": "skip"}
+from torch.nn.functional import conv2d
 
 def simple_conv2d(image, kernel):
-    channels, h, w = image.shape
-    kh, kw = kernel.shape
-    assert kh % 2 == 1 and kw % 2 == 1, "even kernel dimensions are unsupported"
-    
-    pad_y, pad_x = kh // 2, kw // 2
-    padded_image = pad(image, (pad_x, pad_x, pad_y, pad_y), mode='replicate')
-    
-    output = torch.zeros(image.shape)
-    
-    for kx, ky in product(range(kh), range(kw)):
-        output += padded_image[:, ky:ky+h, kx:kx+w] * kernel[ky, kx]
-    
-    return output.clip(0, 1)
+    return torch.cat([
+        conv2d(
+            channel.view(1, 1, *channel.shape), 
+            kernel.view(1, 1, *kernel.shape).float(),
+        )[0]
+        for channel in image
+    ]).clip(0, 1)
 
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
-# Let's experiment on a picture of a [giant rubber duck](https://thebigduck.us/)... beacause why not 😉
+# Now that we know how convolution works, let's experiment with a few simple kernels on a picture of a [giant rubber duck](https://thebigduck.us/)... beacause why not 😉
 #
 # Links:
 # - https://thebigduck.us/
-
-# + tags=[]
-from fastai.vision.all import PILImage
-
-big_duck_image = PILImage.create("./images/big-duck.jpg").to_thumb(390)
-print(big_duck_image.size)
-big_duck_image
-
-# + [markdown] slideshow={"slide_type": "notes"} tags=[]
-# We can convert it into a tensor with a `ToTensor` transform.
-#
-# Links:
 # - https://pytorch.org/vision/stable/generated/torchvision.transforms.ToTensor.html?highlight=totensor#torchvision.transforms.ToTensor
 
 # + tags=[]
+from fastai.vision.all import PILImage
 from torchvision.transforms import ToTensor
 
-big_duck = ToTensor()(big_duck_image)
-show_image(big_duck)
+big_duck = ToTensor()(PILImage.create("./images/big-duck.jpg").to_thumb(400))
+show_image(big_duck, figsize=(8, 4))
 big_duck.shape
 
+
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
-# To blur the image we can create a kernel that will calculate the mean of surrounding pixels, e.g.
-
-# + tags=[]
-torch.ones(3, 3) / 9
-
-
-# -
-
-# or in general
+# First off, let's generalize our blur to any kernel size and see how that works.
 
 # + tags=[]
 def blur_kernel(size=3):
     return torch.ones(size, size) / size / size
 
-show_image(simple_conv2d(big_duck, blur_kernel(5)))
+show_image(simple_conv2d(big_duck, blur_kernel(5)), figsize=(8, 4))
 
 
 # -
@@ -706,7 +779,30 @@ def identity_kernel(size=3):
 def sharpen_kernel(size=3):
     return 2 * identity_kernel(size) - blur_kernel(size)
 
-show_image(simple_conv2d(big_duck, sharpen_kernel(5)))
+show_image(simple_conv2d(big_duck, sharpen_kernel(5)), figsize=(8, 4))
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Now this is fun and all, but how does that fit into neural networks? Well, we can also do feature detection with convolutions, for example these kernels detect horizontal and vertical edges respectively.
+
+# + tags=[]
+horizontal_detector = torch.tensor([
+    [-1, -1, -1],
+    [+2, +2, +2],
+    [-1, -1, -1],
+])
+vertical_detector = torch.tensor([
+    [-1, +2, -1],
+    [-1, +2, -1],
+    [-1, +2, -1],
+])
+
+show_images([
+    simple_conv2d(big_duck, horizontal_detector),
+    simple_conv2d(big_duck, vertical_detector),
+], figsize=(10, 5))
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# There's many many more such kernels that people have already figured out, but what we can do with neural networks is let gradient descent create kernels for us. Instead of using a linear/dense layer we can use a convolutional layer, which uses kernel weights as parameters.
 
 # + tags=[]
 conv1 = nn.Sequential(
