@@ -805,6 +805,30 @@ show_images([
 # There's many many more such kernels that people have already figured out, but what we can do with neural networks is let gradient descent create kernels for us. Instead of using a linear/dense layer we can use a convolutional layer, which uses kernel weights as parameters.
 
 # + tags=[]
+conv_layer = nn.Conv2d(
+    in_channels=1, 
+    out_channels=10, 
+    kernel_size=3,
+    padding=1,
+).to(mnist_loaders.device)
+
+show_images(conv_layer.weight, ncols=5, cmap="gray", vrange=1)
+
+# + tags=[]
+x, _ = mnist_loaders.train.one_batch()
+show_image(x[0], cmap="gray")
+show_images(conv_layer(x[:1]).view(10, 1, 28, 28), ncols=5, cmap="gray", vrange=1)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Now the problem is how do we get from here to our 10 probabilities? With linear/dense layers we could just specify numbers of inputs and outputs, with convolution it's not that simple. We can control the number of outputs with 
+#
+# - the number of kernels - which defines how many output images the layer will produce, called output channels
+# - convolution stride - we can decrease the resolution by skipping pixels in the input image
+# - pooling - taking the average and/or maximum values to decrease the resolution
+#
+# We can create a purely convolutional network by using `stride=2` to decrease the resolution by half with each layer until we get to `1x1` outputs. We also have to make sure the final layer has `10` outputs, one for each digit.
+
+# + tags=[]
 conv1 = nn.Sequential(
     nn.Conv2d(1, 8, 3, stride=2),
     nn.ReLU(),
@@ -816,10 +840,30 @@ conv1 = nn.Sequential(
     nn.Flatten(),
 )
 
-mnist_learner(conv1).fit_one_cycle(5, 0.01)
-# -
+display(mnist_learner(conv1).summary())
 
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# We start with `28x28` images with a single channel. 
+#
+# We are not using padding, so the output of the first layer would be `26x26`, but we are using `stride=2`, so we're skipping every other column and row, and we end up with `13x13`. We continue this process until we get to `1x1`. This single pixel will aggregate information about the entire image, because every time we halve the resolution we also double the area of the input image used to create the output pixel.
+#
+# To compensate for resolution loss after each layer, which would leave just a quarter of the information, we also double the number of output channels, that way the network has to distill the information, but can do that more gradually.
+#
+# This all looks much more complicated than what we saw with our linear models, however, it uses much less parameters.
+
+# + tags=[]
 param_count(linear2), param_count(conv1)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Great, but does it work?
+
+# + tags=[]
+mnist_learner(conv1).fit_one_cycle(5, 0.01)
+
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Well, yes, it easily beats our best linear model while using less than 10% of parameters. 
+#
+# We still have 1.3% error rate to figure out though.
 
 # + tags=[]
 Interpretation.from_learner(mnist_learner(conv1)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
