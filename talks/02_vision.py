@@ -83,6 +83,7 @@ def param_count(module):
 # > For some reason the original link to MNIST dataset https://yann.lecun.com/exdb/mnist/ is asking for authentication, so I've linked to the Wikipedia article instead
 #
 # Links:
+# - https://en.wikipedia.org/wiki/MNIST_database
 # - https://yann.lecun.com/exdb/mnist/
 
 # + [markdown] tags=[] slideshow={"slide_type": "slide"}
@@ -152,6 +153,9 @@ list((mnist_path / "training" / "5").iterdir())[:5]
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # We have 2 directories `training` and `testing`, each of which has 10 directories, 1 for each digit. Each of these directories in turn contain 28x28px grayscale images of handwritten digits. We can use the Python Imaging Library to view these images.
+#
+# Links:
+# - https://pillow.readthedocs.io/en/stable/
 
 # + tags=[]
 from PIL import Image
@@ -193,6 +197,9 @@ Image.open(mnist_path / "training" / "5" / "19858.png")
 #
 # - `ImageBlock` - for our input images
 # - `CategoryBlock` - for digit labels
+#
+# Links:
+# - https://docs.fast.ai/tutorial.datablock.html
 
 # + tags=[]
 from fastai.data.all import DataBlock, CategoryBlock, FuncSplitter
@@ -322,6 +329,12 @@ linear_regression = nn.Sequential(
 # The output of our network will be a single floating-point number, which we will round to the closest integer later. We could round it as part of the network, but that would result in our loss function being mostly flat with zero gradients. That's because changing parameters might result in the exact same output and as such, same loss as before the change, so gradient descent would not work.
 #
 # Predicting a continuous value is called regression and so I've named our first network the `linear_regression` model. Predicting a category is called classification and we'll get to that later.
+#
+# Links:
+# - https://en.wikipedia.org/wiki/Regression_analysis
+# - https://pytorch.org/docs/stable/generated/torch.nn.Sequential.html
+# - https://pytorch.org/docs/stable/generated/torch.nn.Flatten.html
+# - https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
 
 # + tags=[]
 from fastai.learner import Learner
@@ -350,6 +363,13 @@ def mnist_regression_learner(model):
 # Once we've instantiated a `Learner`, we can start training using `fit` or `fit_one_cycle` methods. I won't go into the differences for now, but `fit_one_cycle` is faster 😉. We have to give it the number of epochs (how many times we want to repeat training over the full training set) and the learning rate.
 #
 # The `Learner` class provides a `lr_find()` method, which tries a bunch of learning rates and suggests one for us, so let's try that first.
+#
+# Links:
+# - https://docs.fast.ai/learner.html#learner
+# - https://docs.fast.ai/callback.schedule.html#learner.fit_one_cycle
+# - https://arxiv.org/abs/1708.07120
+# - https://docs.fast.ai/callback.schedule.html#learner.lr_find
+# - https://arxiv.org/abs/1506.01186
 
 # + tags=[]
 mnist_regression_learner(linear_regression).lr_find()
@@ -373,6 +393,14 @@ mnist_loaders.show_results((x, y), y_pred.clip(0, 9), max_n=16, ncols=8, figsize
 # So one of the problems we see here is that our model doesn't know that predictions have to be between `0` and `9`, so every now and then it will return an invalid prediction of `-1` or `10`... the latter has a side effect of `show_results` crashing as well...
 #
 # We could move the `.clip(0, 9)` to the model, but again, that would introduce regions with zero gradients, so we need a smooth function that would do something similar. Luckily there's a `sigmoid` function, which maps any value to `(0, 1)` range.
+#
+# $$
+# \text{Sigmoid}(x) = \sigma(x) = \frac{1}{1 + \exp(-x)}
+# $$
+#
+# Links:
+# - https://en.wikipedia.org/wiki/Sigmoid_function
+# - https://pytorch.org/docs/stable/generated/torch.nn.Sigmoid.html
 
 # + tags=[]
 from matplotlib import pyplot as plt
@@ -384,6 +412,9 @@ plt.show()
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # We need `[0, 9]` instead of `(0, 1)`, but that's fairly easy, we can just multiply the output, that's what the `SigmoidRange` layer from `fastai` does.
+#
+# Links:
+# - https://docs.fast.ai/layers.html#sigmoidrange
 
 # + tags=[]
 from fastai.layers import SigmoidRange
@@ -407,7 +438,7 @@ y_pred = linear_regression_sigmoid(x).round().int().view(16)
 mnist_loaders.show_results((x, y), y_pred, max_n=16, ncols=8, figsize=(8, 2.5))
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
-# Well it's still just as terrible as it was, but at least we no longer have to `.clip()`... maybe we just need a more complex model.
+# Well it's still just as terrible as it was, but at least we no longer have to `.clip()`... maybe we just need a more complex model, let's add a hidden layer.
 
 # + tags=[]
 linear_deep_regression = nn.Sequential(
@@ -450,6 +481,10 @@ linear1 = nn.Sequential(
 # We need to also change our training procedure.
 #
 # First off, we need to change our target, so its shape matches our output. We want the model to learn to predict probabilities and during training we know exactly which digit it is, so we can turn each target digit into a vector with a single 1 (100% probability) and 9 0s for other digits. This is called one-hot encoding.
+#
+# Links:
+# - https://en.wikipedia.org/wiki/One-hot
+# - https://pytorch.org/docs/stable/generated/torch.nn.functional.one_hot.html
 
 # + tags=[]
 from torch.nn.functional import one_hot
@@ -463,7 +498,7 @@ one_hot(torch.tensor(3), num_classes=10)
 from torch.nn.functional import mse_loss, one_hot
 from fastai.metrics import accuracy
 
-def mnist_learner(model):
+def mnist_mse_learner(model):
     def loss(pred, target):
         encoded_target = one_hot(target, num_classes=10).float()
         return mse_loss(pred, encoded_target)
@@ -477,7 +512,7 @@ def mnist_learner(model):
 
 
 # + tags=[]
-mnist_learner(linear1).fit_one_cycle(5, 0.005)
+mnist_mse_learner(linear1).fit_one_cycle(5, 0.005)
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # With this tiny change we have now beaten our baseline model which had accuracy of around 82% 🏆
@@ -485,19 +520,23 @@ mnist_learner(linear1).fit_one_cycle(5, 0.005)
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # Mean-squared error works great for regression, but for classification, where we predict probabilities there's cross-entropy loss, and it looks like:
 #
-# $\text{CrossEntropyLoss}(x,t) = \text{NLLLoss}(\text{Softmax}(x), t)$
+# $$
+# \text{CrossEntropyLoss}(x,t) = \text{NLLLoss}(\text{Softmax}(x), t)
+# $$
 #
 # where:
 #
-# $\text{Softmax}(x_{i}) = \frac{\exp(x_i)}{\sum_j \exp(x_j)}$
+# $$
+# \text{Softmax}(x_{i}) = \frac{\exp(x_i)}{\sum_j \exp(x_j)}
+# $$
 #
-# $\text{NLLLoss}(x, t) = -log(x_t)$
+# $$
+# \text{NLLLoss}(x, t) = -log(x_t)
+# $$
 #
 # `Softmax` makes sure that our predictions are in the `[0,1]` range and that they sum up to `1` like real probabilities.
 #
 # `NLLLoss` is negative log likelihood loss and all it does is just take the `-log()` of our prediction for the target class. That also means that it ignores our predictions for the other classes, as opposed to mean-squared error loss.
-#
-# Enough math, let's see if changing the loss function helps.
 #
 # Links:
 # - https://en.wikipedia.org/wiki/Cross_entropy
@@ -513,12 +552,15 @@ plt.plot(x, -x.log())
 plt.grid(True)
 plt.show()
 
+# + [markdown] slideshow={"slide_type": "notes"} tags=[]
+# Enough math, let's see if changing the loss function helps.
+
 # + tags=[]
 from fastai.losses import CrossEntropyLossFlat
 
-def mnist_learner(model):
+def mnist_learner(model, dls=mnist_loaders):
     return Learner(
-        dls=mnist_loaders,
+        dls=dls,
         model=model,
         loss_func=CrossEntropyLossFlat(),
         metrics=[accuracy],
@@ -584,9 +626,9 @@ ClassificationInterpretation.from_learner(mnist_learner(linear2)).plot_confusion
 # + tags=[]
 linear3 = nn.Sequential(
     nn.Flatten(),
-    nn.Linear(28 * 28, 256),
+    nn.Linear(28 * 28, 128),
     nn.ReLU(),
-    nn.Linear(256, 128),
+    nn.Linear(128, 128),
     nn.ReLU(),
     nn.Linear(128, 10),
 )
@@ -863,7 +905,140 @@ mnist_learner(conv1).fit_one_cycle(5, 0.01)
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # Well, yes, it easily beats our best linear model while using less than 10% of parameters. 
 #
-# We still have 1.3% error rate to figure out though.
+# We still have 1.4% error rate to figure out though.
 
 # + tags=[]
 Interpretation.from_learner(mnist_learner(conv1)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+
+# + tags=[]
+from fastai.vision.augment import Rotate, Zoom, Warp, PadMode, setup_aug_tfms
+
+def augment_mnist_loaders(transforms):
+    return mnist_block.new(batch_tfms=setup_aug_tfms(transforms)).dataloaders(mnist_path)
+
+mnist_augmented_loaders1 = augment_mnist_loaders([
+    Warp(p=0.5, magnitude=0.1, pad_mode=PadMode.Zeros),
+    Zoom(p=0.5, min_zoom=0.9, max_zoom=1.1, pad_mode=PadMode.Zeros),
+    Rotate(p=0.5, max_deg=30, pad_mode=PadMode.Zeros),
+])
+
+# + tags=[]
+mnist_augmented_loaders1.train.show_batch(max_n=16, ncols=8, figsize=(8, 2.5))
+
+# + tags=[]
+conv1_augmented = nn.Sequential(
+    nn.Conv2d(1, 8, 3, stride=2),
+    nn.ReLU(),
+    nn.Conv2d(8, 16, 3, stride=2),
+    nn.ReLU(),
+    nn.Conv2d(16, 32, 3, stride=2),
+    nn.ReLU(),
+    nn.Conv2d(32, 10, 2),
+    nn.Flatten(),
+)
+
+mnist_learner(conv1_augmented, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
+
+# + tags=[]
+Interpretation.from_learner(mnist_learner(conv1_augmented)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+
+
+# +
+def conv2_block(channels_in, channels_out):
+    return nn.Sequential(
+        nn.Conv2d(channels_in, channels_out, 3, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(channels_out, channels_out, 3, stride=2),
+        nn.ReLU(),
+    )
+
+conv2 = nn.Sequential(
+    conv2_block(1, 16),
+    conv2_block(16, 32),
+    conv2_block(32, 64),
+    
+    nn.Conv2d(64, 10, 2),
+    nn.Flatten(),
+)
+
+mnist_learner(conv2).summary()
+
+# + tags=[]
+mnist_learner(conv2, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
+# -
+
+Interpretation.from_learner(mnist_learner(conv2)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+
+
+# + tags=[]
+def conv3_block(channels_in, channels_out):
+    return nn.Sequential(
+        nn.Conv2d(channels_in, channels_out, 3, padding=1),
+        nn.ReLU(),
+        nn.BatchNorm2d(channels_out),
+        nn.Conv2d(channels_out, channels_out, 3, stride=2),
+        nn.ReLU(),
+        nn.BatchNorm2d(channels_out),
+    )
+
+conv3 = nn.Sequential(
+    conv3_block(1, 16),
+    conv3_block(16, 32),
+    conv3_block(32, 64),
+    
+    nn.Conv2d(64, 10, 2),
+    nn.Flatten(),
+)
+
+mnist_learner(conv3, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
+
+# + tags=[]
+Interpretation.from_learner(mnist_learner(conv3)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+
+# + tags=[]
+from torchvision.transforms import Resize
+from fastai.vision.augment import RandTransform
+from fastai.vision.data import TensorImageBW
+
+class NoiseMask(RandTransform):
+    split_index = 0
+    
+    def encodes(self, x: TensorImageBW):
+        bs, _, h, w = x.shape
+        nh, nw = h // 4, w // 4
+        resize = Resize((h, w))
+        noise = (8 * resize(torch.rand(bs, 1, nh, nw)) - 1.6).clip(0, 1)
+        return x * noise.to(x.device)
+
+mnist_augmented_loaders2 = augment_mnist_loaders([
+    NoiseMask(p=1),
+    Warp(p=0.5, magnitude=0.1, pad_mode=PadMode.Zeros),
+    Zoom(p=0.5, min_zoom=0.9, max_zoom=1.1, pad_mode=PadMode.Zeros),
+    Rotate(p=0.5, max_deg=30, pad_mode=PadMode.Zeros),
+])
+
+
+# + tags=[]
+def conv4_block(channels_in, channels_out):
+    return nn.Sequential(
+        nn.Conv2d(channels_in, channels_out, 3, padding=1),
+        nn.ReLU(),
+        nn.BatchNorm2d(channels_out),
+        nn.Conv2d(channels_out, channels_out, 3, stride=2),
+        nn.ReLU(),
+        nn.BatchNorm2d(channels_out),
+    )
+
+conv4 = nn.Sequential(
+    conv4_block(1, 16),
+    conv4_block(16, 32),
+    conv4_block(32, 64),
+    
+    nn.Conv2d(64, 10, 2),
+    nn.Flatten(),
+)
+
+mnist_learner(conv4, dls=mnist_augmented_loaders2).fit_one_cycle(5, 0.01)
+
+# + tags=[]
+Interpretation.from_learner(mnist_learner(conv4)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
