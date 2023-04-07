@@ -608,10 +608,10 @@ mnist_learner(linear2).fit_one_cycle(5, 0.01)
 # + tags=[]
 from fastai.interpret import Interpretation
 
-Interpretation.from_learner(mnist_learner(linear2)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+Interpretation.from_learner(mnist_learner(linear2)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
-# As you can see we are very much in the MNIST hard mode. Some of these a human would have problems with as well.
+# As you can see we are entering the MNIST hard mode. Some of these a human would have problems with as well.
 #
 # We can also plot a confusion matrix, which shows how many digits we are mislabeling and how. On the diagonal we see correct labels, everywhere else there are errors.
 
@@ -887,7 +887,7 @@ display(mnist_learner(conv1).summary())
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # We start with `28x28` images with a single channel. 
 #
-# We are not using padding, so the output of the first layer would be `26x26`, but we are using `stride=2`, so we're skipping every other column and row, and we end up with `13x13`. We continue this process until we get to `1x1`. This single pixel will aggregate information about the entire image, because every time we halve the resolution we also double the area of the input image used to create the output pixel.
+# We are not using padding, so the output of the first layer would be `26x26`, but we are using `stride=2`, so we're skipping every other column and row, and we end up with `13x13`. We continue this process until we get to `1x1`. This single pixel will aggregate information about the entire image, because every time we halve the resolution we also double the area of the input image used to create the output pixel. We could also make the network completely image size independent by replacing the final convolution with a pooling layer, that would just average out whatever pixels are left after our convolutions into a single pixel.
 #
 # To compensate for resolution loss after each layer, which would leave just a quarter of the information, we also double the number of output channels, that way the network has to distill the information, but can do that more gradually.
 #
@@ -905,10 +905,23 @@ mnist_learner(conv1).fit_one_cycle(5, 0.01)
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # Well, yes, it easily beats our best linear model while using less than 10% of parameters. 
 #
-# We still have 1.4% error rate to figure out though.
+# We still have 1.4% error rate to figure out though. Before we move on, let's just have a look at digits we are still having problems with.
 
 # + tags=[]
-Interpretation.from_learner(mnist_learner(conv1)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+Interpretation.from_learner(mnist_learner(conv1)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
+# -
+
+# ## Data Augmentation
+
+# If you look at the losses from our last training you will notice that the training loss is much lower than our validation loss. That is a sign we might be overfitting. Fundamentally overfitting happens when a model is complex enough to be able to learn things that are specific to the training set, which might not be true in real use, which we measure with the validation set. The best option to resolve that is to obtain more training data.
+#
+# Gathering new data might be time consuming and/or costly, you don't always have students at hand to extend your handwritten digits set.
+#
+# For images, and some other domains, we can however create infinite amount of data from what we already have by randomly transforming samples in our training set. We can for example rotate our digits at random to ensure our model is capable of classifying a digit regardless of its orientation. That is as long as your transforms wouldn't change the label, e.g. rotating a `6` by 180 degrees would turn it into a `9`.
+#
+# Applying such transforms during training to automatically create more data is called data augmentation.
+#
+# `fastai` provides some common augmentations we can take advantage of, we just need to create new data loaders with the added augmentation.
 
 # + tags=[]
 from fastai.vision.augment import Rotate, Zoom, Warp, PadMode, setup_aug_tfms
@@ -921,9 +934,15 @@ mnist_augmented_loaders1 = augment_mnist_loaders([
     Zoom(p=0.5, min_zoom=0.9, max_zoom=1.1, pad_mode=PadMode.Zeros),
     Rotate(p=0.5, max_deg=30, pad_mode=PadMode.Zeros),
 ])
+# -
+
+# This will add some random warping, zooming and rotation to our training batches, here's a sample of what that looks like.
 
 # + tags=[]
 mnist_augmented_loaders1.train.show_batch(max_n=16, ncols=8, figsize=(8, 2.5))
+# -
+
+# Let's try the same model on this autmented training set
 
 # + tags=[]
 conv1_augmented = nn.Sequential(
@@ -939,16 +958,17 @@ conv1_augmented = nn.Sequential(
 
 mnist_learner(conv1_augmented, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
 
-# + tags=[]
-Interpretation.from_learner(mnist_learner(conv1_augmented)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
 
+# -
+
+# We're not doing much better than the model trained without augmentations, but now we are no longer overfitting. That means we can increase the models complexity so it can do better on our new training data and, hopefully, on our validation set.
 
 # +
 def conv2_block(channels_in, channels_out):
     return nn.Sequential(
-        nn.Conv2d(channels_in, channels_out, 3, padding=1),
+        nn.Conv2d(channels_in, channels_out, 3, stride=2),
         nn.ReLU(),
-        nn.Conv2d(channels_out, channels_out, 3, stride=2),
+        nn.Conv2d(channels_out, channels_out, 3, padding=1),
         nn.ReLU(),
     )
 
@@ -961,24 +981,27 @@ conv2 = nn.Sequential(
     nn.Flatten(),
 )
 
-mnist_learner(conv2).summary()
-
-# + tags=[]
 mnist_learner(conv2, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
 # -
 
-Interpretation.from_learner(mnist_learner(conv2)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+# We've doubled the number of convolution layers, after every convolutional layer, we've added another one without `stride`, so it doesn't change the output shape. We've also doubled the number of filters in each layer.
+#
+# Results seem to be promising, we are now over the 99% threshold.
 
+Interpretation.from_learner(mnist_learner(conv2)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
+
+
+#
 
 # + tags=[]
 def conv3_block(channels_in, channels_out):
     return nn.Sequential(
-        nn.Conv2d(channels_in, channels_out, 3, padding=1),
-        nn.ReLU(),
+        nn.Conv2d(channels_in, channels_out, 3, stride=2),
         nn.BatchNorm2d(channels_out),
-        nn.Conv2d(channels_out, channels_out, 3, stride=2),
         nn.ReLU(),
+        nn.Conv2d(channels_out, channels_out, 3, padding=1),
         nn.BatchNorm2d(channels_out),
+        nn.ReLU(),
     )
 
 conv3 = nn.Sequential(
@@ -993,7 +1016,7 @@ conv3 = nn.Sequential(
 mnist_learner(conv3, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
 
 # + tags=[]
-Interpretation.from_learner(mnist_learner(conv3)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+Interpretation.from_learner(mnist_learner(conv3)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
 
 # + tags=[]
 from torchvision.transforms import Resize
@@ -1007,26 +1030,69 @@ class NoiseMask(RandTransform):
         bs, _, h, w = x.shape
         nh, nw = h // 4, w // 4
         resize = Resize((h, w))
-        noise = (8 * resize(torch.rand(bs, 1, nh, nw)) - 1.6).clip(0, 1)
+        noise = (8 * resize(torch.rand(bs, 1, nh, nw)) - 2).clip(0, 1)
         return x * noise.to(x.device)
 
+
+# + tags=[]
+x, y = mnist_loaders.train.new(bs=8).one_batch()
+mask = NoiseMask(p=1)(torch.ones_like(x), split_idx=0)
+x_masked = x * mask
+
+mnist_loaders.show_batch((x, y), ncols=8, figsize=(8, 2.5))
+mnist_loaders.show_batch((1 - mask, y), ncols=8, figsize=(8, 2.5))
+mnist_loaders.show_batch((x_masked, y), ncols=8, figsize=(8, 2.5))
+
+
+# + tags=[]
+class Bolden(RandTransform):
+    split_index = 0
+    order = 30
+    
+    def __init__(self, p=0.5, min_amount=-0.8, max_amount=1):
+        super().__init__(p=p)
+        self.min_amount, self.max_amount = min_amount, max_amount
+        self.kernel = torch.tensor([
+            [0.5, 0.8, 0.5],
+            [0.8, 1.0, 0.8],
+            [0.5, 0.8, 0.5],
+        ]).view(1, 1, 3, 3)
+        self.kernel /= self.kernel.sum()
+    
+    def encodes(self, x: TensorImageBW):
+        bs = x.shape[0]
+        amount = self.min_amount + (self.max_amount - self.min_amount) * torch.rand(bs, 1, 1, 1).to(x.device)
+        return (4 * conv2d(x, self.kernel.to(x.device), padding=1) - 1.5 + amount).clip(0, 1)
+
+
+# + tags=[]
+x_bold = Bolden(p=1)(x, split_idx=0)
+
+mnist_loaders.show_batch((x, y), ncols=8, figsize=(8, 2.5))
+mnist_loaders.show_batch((x_bold, y), ncols=8, figsize=(8, 2.5))
+
+# + tags=[]
 mnist_augmented_loaders2 = augment_mnist_loaders([
-    NoiseMask(p=1),
+    NoiseMask(p=0.25),
+    Bolden(p=0.25),
     Warp(p=0.5, magnitude=0.1, pad_mode=PadMode.Zeros),
     Zoom(p=0.5, min_zoom=0.9, max_zoom=1.1, pad_mode=PadMode.Zeros),
     Rotate(p=0.5, max_deg=30, pad_mode=PadMode.Zeros),
 ])
 
+# + tags=[]
+mnist_augmented_loaders2.show_batch(max_n=16, ncols=8, figsize=(8, 2.5))
+
 
 # + tags=[]
 def conv4_block(channels_in, channels_out):
     return nn.Sequential(
-        nn.Conv2d(channels_in, channels_out, 3, padding=1),
-        nn.ReLU(),
+        nn.Conv2d(channels_in, channels_out, 3, stride=2),
         nn.BatchNorm2d(channels_out),
-        nn.Conv2d(channels_out, channels_out, 3, stride=2),
         nn.ReLU(),
+        nn.Conv2d(channels_out, channels_out, 3, padding=1),
         nn.BatchNorm2d(channels_out),
+        nn.ReLU(),
     )
 
 conv4 = nn.Sequential(
@@ -1038,7 +1104,57 @@ conv4 = nn.Sequential(
     nn.Flatten(),
 )
 
-mnist_learner(conv4, dls=mnist_augmented_loaders2).fit_one_cycle(5, 0.01)
+mnist_learner(conv4, dls=mnist_augmented_loaders2).fit_one_cycle(10, 0.01)
 
 # + tags=[]
-Interpretation.from_learner(mnist_learner(conv4)).plot_top_losses(k=16, ncols=4, figsize=(8, 5))
+Interpretation.from_learner(mnist_learner(conv4)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
+
+
+# + [markdown] tags=[] jp-MarkdownHeadingCollapsed=true
+# ## Residual / skip connections
+
+# + tags=[]
+class ResBlock(nn.Module):
+    def __init__(self, channels_in, channels_out):
+        super().__init__()
+        
+        self.conv = nn.Sequential(
+            nn.Conv2d(channels_in, channels_out, 3, stride=2, padding=1),
+            nn.BatchNorm2d(channels_out),
+            nn.ReLU(),
+            nn.Conv2d(channels_out, channels_out, 3, padding=1),
+            nn.BatchNorm2d(channels_out),
+        )
+        self.conv[-1].weight.data.fill_(0)
+        
+        self.skip = nn.Sequential(
+            nn.Conv2d(channels_in, channels_out, 1),
+            nn.BatchNorm2d(channels_out),
+            nn.AvgPool2d(2, ceil_mode=True),
+        )
+        
+        self.activation = nn.ReLU()
+        
+    def forward(self, x):
+        return self.activation(self.conv(x) + self.skip(x))
+
+res1 = nn.Sequential(
+    ResBlock(1, 16),
+    ResBlock(16, 32),
+    ResBlock(32, 64),
+    
+    nn.AdaptiveAvgPool2d(1),
+    nn.Flatten(),
+    nn.Linear(64, 10),
+)
+
+mnist_learner(res1).summary()
+
+# + tags=[]
+mnist_learner(res1, dls=mnist_augmented_loaders2).fit_one_cycle(5, 0.01)
+
+# + tags=[]
+Interpretation.from_learner(mnist_learner(res1)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
+# -
+
+
