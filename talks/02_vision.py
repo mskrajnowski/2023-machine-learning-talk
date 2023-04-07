@@ -605,6 +605,9 @@ mnist_learner(linear2).fit_one_cycle(5, 0.01)
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # Just 2% error rate, another huge jump in accuracy. Now that we are getting very close to 100%, let's review cases where the model has problems. `fastai` offers a couple helpers for intepreting the results. We can start with showing the samples that we are most incorrect about, that have the highest losses.
+#
+# Links:
+# - https://docs.fast.ai/interpret.html
 
 # + tags=[]
 from fastai.interpret import Interpretation
@@ -673,8 +676,13 @@ format(param_count(
 # Luckily people have been processing images for decades and so we can draw inspiration from that. Common image filters such as blur or sharpen use convolution under the hood. Filters like these calculate the color of the output pixel by multiplying the corresponding input pixel and its surroundings by a matrix and summing the values up. This matrix is called a convolution kernel. 
 #
 # Let's visualize how that works with a simple blur kernel, which just averages out surrounding pixels.
+#
+# Links:
+# - https://en.wikipedia.org/wiki/Convolution
+# - https://en.wikipedia.org/wiki/Kernel_(image_processing)
+# - https://arxiv.org/abs/1603.07285
 
-# + tags=[] slideshow={"slide_type": "skip"}
+# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
 import ipywidgets as widgets
 from torch.nn.functional import conv2d
 from torchvision.transforms import ToTensor
@@ -770,7 +778,7 @@ interactive_conv2d(
     kernel=kernel,
 )
 
-# + tags=[] slideshow={"slide_type": "skip"}
+# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
 from torch.nn.functional import conv2d
 
 def simple_conv2d(image, kernel):
@@ -789,6 +797,7 @@ def simple_conv2d(image, kernel):
 # Links:
 # - https://thebigduck.us/
 # - https://pytorch.org/vision/stable/generated/torchvision.transforms.ToTensor.html?highlight=totensor#torchvision.transforms.ToTensor
+# - https://pytorch.org/docs/stable/generated/torch.nn.functional.conv2d.html
 
 # + tags=[]
 from fastai.vision.all import PILImage
@@ -846,6 +855,10 @@ show_images([
 
 # + [markdown] slideshow={"slide_type": "notes"} tags=[]
 # There's many many more such kernels that people have already figured out, but what we can do with neural networks is let gradient descent create kernels for us. Instead of using a linear/dense layer we can use a convolutional layer, which uses kernel weights as parameters.
+#
+# Links:
+# - https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
+# - https://en.wikipedia.org/wiki/Convolutional_neural_network
 
 # + tags=[]
 conv_layer = nn.Conv2d(
@@ -856,6 +869,9 @@ conv_layer = nn.Conv2d(
 ).to(mnist_loaders.device)
 
 show_images(conv_layer.weight, ncols=5, cmap="gray", vrange=1)
+# -
+
+# As you can see a convolutional layer starts with random kernels. We can apply these kernels to an example image and see what that looks like.
 
 # + tags=[]
 x, _ = mnist_loaders.train.one_batch()
@@ -923,6 +939,11 @@ Interpretation.from_learner(mnist_learner(conv1)).plot_top_losses(k=24, ncols=6,
 # Applying such transforms during training to automatically create more data is called data augmentation.
 #
 # `fastai` provides some common augmentations we can take advantage of, we just need to create new data loaders with the added augmentation.
+#
+# Links:
+# - https://en.wikipedia.org/wiki/Data_augmentation
+# - https://pytorch.org/vision/main/transforms.html
+# - https://docs.fast.ai/vision.augment.html
 
 # + tags=[]
 from fastai.vision.augment import Rotate, Zoom, Warp, PadMode, setup_aug_tfms
@@ -943,7 +964,7 @@ mnist_augmented_loaders1 = augment_mnist_loaders([
 mnist_augmented_loaders1.train.show_batch(max_n=16, ncols=8, figsize=(8, 2.5))
 # -
 
-# Let's try the same model on this autmented training set
+# Let's try the same model on this augmented training set
 
 # + tags=[]
 conv1_augmented = nn.Sequential(
@@ -993,6 +1014,11 @@ Interpretation.from_learner(mnist_learner(conv2)).plot_top_losses(k=24, ncols=6,
 
 # ## Batch normalization
 
+# As I mentioned earlier `fastai` provides us with useful tools to inspect our model, one of these tools is the `ActivationStats` callback, which gathers statistics about activations of each trainable layer of our network during training. This let's us look into the training process.
+#
+# Links:
+# - https://docs.fast.ai/callback.hook.html#activation-graphs
+
 # + tags=[]
 from fastai.callback.all import ActivationStats
 
@@ -1010,12 +1036,22 @@ debug_learner.fit_one_cycle(1, 0.01)
 
 # + tags=[]
 for i in range(len(debug_learner.activation_stats.stats[0])):
-    debug_learner.activation_stats.plot_layer_stats(i)
-
-# + tags=[]
-for i in range(len(debug_learner.activation_stats.stats[0])):
     debug_learner.activation_stats.color_dim(i)
 
+
+# -
+
+# `color_dim()` stacks histograms of activations of each batch on a single diagram, x axis is the batch index (or time) and the y axis represents the histogram of a particular batch. Color is used to mark how many activations there are with a particular value, from blue (few) to yellow (many).
+#
+# What we can see here is that the deeper we go in our network the more erratic the training becomes. The weights start near zero, shoot up and then collapse again and this cycle continues until it finally smooths itself out. This happens because activations in deeper levels are dependent on the previous levels, so small changes at the start of the network are multiplied through it, either shooting the activations up or zeroing them. The later layers have to compensate for the changes and so we get these oscilations.
+
+# One way to deal with this problem is introducing normalization layers, which will scale the activations to a standard range, e.g. `(-1, 1)` or `(0, 1)`. 
+#
+# This would however prevent our network from outputing high activations when necessary to notify deeper layers of something important, so what we end up doing is adding a layer which normalizes the output range first then scales the outputs back up using a linear transform. Such a layer is provided by `pytorch` as different `BatchNorm` layers, since we have 2-dimensional inputs we need to use `BatchNorm2d`.
+#
+# Links:
+# - https://nbviewer.org/github/fastai/fastbook/blob/master/13_convolutions.ipynb
+# - https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
 
 # + tags=[]
 def conv3_block(channels_in, channels_out):
@@ -1037,13 +1073,34 @@ conv3 = nn.Sequential(
     nn.Flatten(),
 )
 
+conv3_learner = mnist_learner(conv3, cbs=[ActivationStats(every=4, with_hist=True)])
+conv3_learner.fit_one_cycle(1, 0.01)
+
+# + tags=[]
+for i in range(0, len(conv3_learner.activation_stats.stats[0]), 2):
+    conv3_learner.activation_stats.color_dim(i)
+# -
+
+# Much smoother, let's see if that actually improves our results.
+
+# + tags=[]
 mnist_learner(conv3, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
+# -
+
+# Another huge improvement in accuracy.
+
+# ## Custom data augmentations
 
 # + tags=[]
 Interpretation.from_learner(mnist_learner(conv3)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
 # -
 
-# ## Custom data augmentations
+# Looking at the digits our network has problems with I see 2 patterns:
+#
+# - digits with missing parts of the lines
+# - narrow and bold lines
+#
+# We can add custom augmentations that would introduce more such digits into the training set.
 
 # + tags=[]
 from torchvision.transforms import Resize
@@ -1071,6 +1128,14 @@ mnist_loaders.show_batch((1 - mask, y), ncols=8, figsize=(8, 2.5))
 mnist_loaders.show_batch((x_masked, y), ncols=8, figsize=(8, 2.5))
 
 
+# -
+
+# `NoiseMask` will:
+# - generate a `7x7` image with random noise
+# - scale it up to `28x28` so it matches our image dimensions
+# - increase the contrast of the noise
+# - apply the mask to the original image to hide random bits of the digit
+
 # + tags=[]
 class Bolden(RandTransform):
     split_index = 0
@@ -1097,35 +1162,39 @@ x_bold = Bolden(p=1)(x, split_idx=0)
 
 mnist_loaders.show_batch((x, y), ncols=8, figsize=(8, 2.5))
 mnist_loaders.show_batch((x_bold, y), ncols=8, figsize=(8, 2.5))
+# -
+
+# `Bolden` on the other hand blurs the original image and then adjusts the black level to randomly make the lines lighter or bolder.
+
+# Both transforms are based on `fastai` `RandTransform`, which gives us 2 things:
+# - randomly switching the transform on or off for a particular batch, with the probability `p`
+# - using the transform only for training, training has `split_idx=0` and validation has `split_idx=1` 
+#
+# We can now create data loaders with all the previous augmentations and our custom ones.
+#
+# Links:
+# - https://docs.fast.ai/vision.augment.html#randtransform-
 
 # + tags=[]
 mnist_augmented_loaders2 = augment_mnist_loaders([
-    NoiseMask(p=0.25),
     Bolden(p=0.25),
     Warp(p=0.5, magnitude=0.1, pad_mode=PadMode.Zeros),
     Zoom(p=0.5, min_zoom=0.9, max_zoom=1.1, pad_mode=PadMode.Zeros),
     Rotate(p=0.5, max_deg=30, pad_mode=PadMode.Zeros),
+    NoiseMask(p=0.25),
 ])
 
 # + tags=[]
 mnist_augmented_loaders2.show_batch(max_n=16, ncols=8, figsize=(8, 2.5))
+# -
 
+# ...and see if it actually helps
 
 # + tags=[]
-def conv4_block(channels_in, channels_out):
-    return nn.Sequential(
-        nn.Conv2d(channels_in, channels_out, 3, stride=2),
-        nn.BatchNorm2d(channels_out),
-        nn.ReLU(),
-        nn.Conv2d(channels_out, channels_out, 3, padding=1),
-        nn.BatchNorm2d(channels_out),
-        nn.ReLU(),
-    )
-
 conv4 = nn.Sequential(
-    conv4_block(1, 16),
-    conv4_block(16, 32),
-    conv4_block(32, 64),
+    conv3_block(1, 16),
+    conv3_block(16, 32),
+    conv3_block(32, 64),
     
     nn.Conv2d(64, 10, 2),
     nn.Flatten(),
@@ -1137,8 +1206,47 @@ mnist_learner(conv4, dls=mnist_augmented_loaders2).fit_one_cycle(10, 0.01)
 Interpretation.from_learner(mnist_learner(conv4)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
 
 
-# + [markdown] tags=[] jp-MarkdownHeadingCollapsed=true
-# ## Residual / skip connections
+# -
+
+# Sadly, there's not much difference in accuracy, however, it does seem like the `NoiseMask` augmentation worked and the model classifies images with missing details better.
+#
+# ~99.5% accuracy is the best I got so far and it has to be enough for this talk.
+
+# ## Convolutional weights vizualization
+
+# + [markdown] tags=[]
+# Understanding what neural networks learn is one of the major research topics in machine learning. [Matthew Zeiler and Rob Fergus](https://arxiv.org/abs/1311.2901) analyzed convolutional networks trained on [ImageNet](https://www.image-net.org/about.php) and provided great visualizations of layer weights and kernels learned.
+#
+# Links
+# - https://arxiv.org/abs/1311.2901
+# - https://nbviewer.org/github/fastai/fastbook/blob/master/01_intro.ipynb
+
+# + [markdown] tags=[]
+# <img src="./images/cnn_layer1.png" alt="Layer 1" width="50%">
+
+# + [markdown] tags=[]
+# <img src="./images/cnn_layer2.png" alt="Layer 2" width="100%">
+
+# + [markdown] tags=[]
+# <img src="./images/cnn_layer3.png" alt="Layer 3" width="100%">
+
+# + [markdown] tags=[]
+# <img src="./images/cnn_layer4.png" alt="Layer 4" width="100%"> 
+
+# + [markdown] tags=[]
+# <img src="./images/cnn_layer5.png" alt="Layer 5" width="100%">
+# -
+
+# ## Thanks
+
+# Thanks for reading/listening/watching. 
+#
+# Now that we more or less have the basics covered, in the next talk I plan to cover something more complicated, like implementing your own google translate.
+#
+# See you next time 👋
+
+# + [markdown] tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true
+# ## Residual / skip connections experiments
 
 # + tags=[]
 class ResBlock(nn.Module):
