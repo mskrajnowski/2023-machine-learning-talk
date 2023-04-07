@@ -558,12 +558,13 @@ plt.show()
 # + tags=[]
 from fastai.losses import CrossEntropyLossFlat
 
-def mnist_learner(model, dls=mnist_loaders):
+def mnist_learner(model, dls=mnist_loaders, cbs=None):
     return Learner(
         dls=dls,
         model=model,
         loss_func=CrossEntropyLossFlat(),
         metrics=[accuracy],
+        cbs=cbs,
     )
 
 
@@ -990,8 +991,31 @@ mnist_learner(conv2, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
 
 Interpretation.from_learner(mnist_learner(conv2)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
 
+# ## Batch normalization
 
-#
+# + tags=[]
+from fastai.callback.all import ActivationStats
+
+debug_conv2 = nn.Sequential(
+    conv2_block(1, 16),
+    conv2_block(16, 32),
+    conv2_block(32, 64),
+    
+    nn.Conv2d(64, 10, 2),
+    nn.Flatten(),
+)
+
+debug_learner = mnist_learner(debug_conv2, cbs=[ActivationStats(every=4, with_hist=True)])
+debug_learner.fit_one_cycle(1, 0.01)
+
+# + tags=[]
+for i in range(len(debug_learner.activation_stats.stats[0])):
+    debug_learner.activation_stats.plot_layer_stats(i)
+
+# + tags=[]
+for i in range(len(debug_learner.activation_stats.stats[0])):
+    debug_learner.activation_stats.color_dim(i)
+
 
 # + tags=[]
 def conv3_block(channels_in, channels_out):
@@ -1017,6 +1041,9 @@ mnist_learner(conv3, dls=mnist_augmented_loaders1).fit_one_cycle(5, 0.01)
 
 # + tags=[]
 Interpretation.from_learner(mnist_learner(conv3)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
+# -
+
+# ## Custom data augmentations
 
 # + tags=[]
 from torchvision.transforms import Resize
@@ -1049,7 +1076,7 @@ class Bolden(RandTransform):
     split_index = 0
     order = 30
     
-    def __init__(self, p=0.5, min_amount=-0.8, max_amount=1):
+    def __init__(self, p=0.5, min_amount=-0.8, max_amount=1.5):
         super().__init__(p=p)
         self.min_amount, self.max_amount = min_amount, max_amount
         self.kernel = torch.tensor([
