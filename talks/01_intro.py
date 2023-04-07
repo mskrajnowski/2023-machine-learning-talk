@@ -1,6 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: py:light,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: light
@@ -135,6 +136,9 @@ def demo_classify(image):
     category_probabilities = dict(zip(demo_dls.vocab, probabilities.tolist()))
     return category, category_probabilities
 
+
+# +
+from fastai.vision.all import PILImage
 
 test_image = PILImage.create(next(demo_path.glob("**/*.jpg")))
 display(test_image.to_thumb(200))
