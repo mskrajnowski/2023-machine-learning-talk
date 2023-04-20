@@ -682,7 +682,7 @@ format(param_count(
 # - https://en.wikipedia.org/wiki/Kernel_(image_processing)
 # - https://arxiv.org/abs/1603.07285
 
-# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
+# + tags=[] slideshow={"slide_type": "skip"}
 import ipywidgets as widgets
 from torch.nn.functional import conv2d
 from torchvision.transforms import ToTensor
@@ -778,7 +778,7 @@ interactive_conv2d(
     kernel=kernel,
 )
 
-# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
+# + tags=[] slideshow={"slide_type": "skip"}
 from torch.nn.functional import conv2d
 
 def simple_conv2d(image, kernel):
@@ -1245,7 +1245,7 @@ Interpretation.from_learner(mnist_learner(conv4)).plot_top_losses(k=24, ncols=6,
 #
 # See you next time 👋
 
-# + [markdown] tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true
+# + [markdown] tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true
 # ## Residual / skip connections experiments
 
 # + tags=[]
@@ -1291,5 +1291,79 @@ mnist_learner(res1, dls=mnist_augmented_loaders2).fit_one_cycle(5, 0.01)
 # + tags=[]
 Interpretation.from_learner(mnist_learner(res1)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
 # -
+# ## Label smoothing
 
 
+# + tags=[] slideshow={"slide_type": "skip"}
+from fastai.vision.utils import show_images as fastai_show_images
+
+def plot_top_unsure(model):
+    x, y_pred, y = mnist_learner(conv5).get_preds(with_input=True)
+    most_unsure = y_pred.max(dim=1).values.sort().indices[:24]
+    
+    axs = plt.subplots(3, 8, figsize=(12, 7))[1].flat
+    
+    for idx, ax in zip(most_unsure, axs): 
+        label = y[idx]
+        top_probs, top_labels = y_pred[idx].sort(dim=0, descending=True)
+        top_titles = [f"{label.item()}: {prob.item():.2f}" for prob, label in zip(top_probs, top_labels)]
+        title = "\n".join([
+            f"{label.item()}", 
+            *top_titles[:3],
+        ])
+        
+        show_image(1 - x[idx], ax=ax, title=title, cmap="gray", vmin=0, vmax=1)
+    
+def plot_probability_histogram(model, max_probability=1):
+    y_pred, y = mnist_learner(model).get_preds()
+    y_pred_top = y_pred.sort(dim=1, descending=True).values[:,:2]
+    
+    plt.hist(y_pred_top[y_pred_top[:,0] <= max_probability].T, bins=100, stacked=True)
+    plt.xlim(0, 1)
+    plt.show()
+
+
+# + tags=[]
+plot_probability_histogram(conv4)
+plot_probability_histogram(conv4, max_probability=0.95)
+
+plot_top_unsure(conv4)
+
+# + tags=[]
+from fastai.losses import LabelSmoothingCrossEntropyFlat
+
+conv5 = nn.Sequential(
+    conv3_block(1, 16),
+    conv3_block(16, 32),
+    conv3_block(32, 64),
+    
+    nn.Conv2d(64, 10, 2),
+    nn.Flatten(),
+)
+
+Learner(
+    dls=mnist_augmented_loaders2,
+    model=conv5,
+    loss_func=LabelSmoothingCrossEntropyFlat(eps=0.1),
+    metrics=[accuracy],
+).fit_one_cycle(10, 0.01)
+
+# + tags=[]
+plot_probability_histogram(conv5)
+plot_probability_histogram(conv5, max_probability=0.85)
+
+plot_top_unsure(conv5)
+
+# + tags=[]
+conv5_interpretation = Interpretation.from_learner(mnist_learner(conv5))
+conv5_interpretation.plot_top_losses(k=24, ncols=6, figsize=(12, 5))
+
+# + tags=[]
+conv5_interpretation.plot_top_losses(k=24, largest=False, ncols=6, figsize=(12, 5))
+
+# + tags=[]
+import random
+
+idx = random.sample(range(len(mnist_loaders.dataset.valid)), k=24)
+
+conv5_interpretation.plot_top_losses(k=idx, ncols=6, figsize=(12, 5))
