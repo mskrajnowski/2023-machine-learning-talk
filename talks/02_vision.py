@@ -13,13 +13,13 @@
 #     name: python3
 # ---
 
-# + [markdown] slideshow={"slide_type": "skip"} tags=[]
+# + [markdown] slideshow={"slide_type": "skip"} tags=[] jp-MarkdownHeadingCollapsed=true
 # # Setup
 
-# + tags=[] slideshow={"slide_type": "skip"}
+# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
 # %matplotlib inline
 
-# + tags=[] slideshow={"slide_type": "skip"}
+# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
 import math
 from matplotlib import pyplot as plt
 from fastai.torch_core import show_image
@@ -49,7 +49,7 @@ def show_images(
         show_image(image, ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, **kwargs)
 
 
-# + tags=[] slideshow={"slide_type": "skip"}
+# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
 def param_count(module):
     return sum(param.numel() for param in module.parameters())
 
@@ -682,7 +682,7 @@ format(param_count(
 # - https://en.wikipedia.org/wiki/Kernel_(image_processing)
 # - https://arxiv.org/abs/1603.07285
 
-# + tags=[] slideshow={"slide_type": "skip"}
+# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
 import ipywidgets as widgets
 from torch.nn.functional import conv2d
 from torchvision.transforms import ToTensor
@@ -1204,13 +1204,134 @@ mnist_learner(conv4, dls=mnist_augmented_loaders2).fit_one_cycle(10, 0.01)
 
 # + tags=[]
 Interpretation.from_learner(mnist_learner(conv4)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
-
-
 # -
 
 # Sadly, there's not much difference in accuracy, however, it does seem like the `NoiseMask` augmentation worked and the model classifies images with missing details better.
 #
 # ~99.5% accuracy is the best I got so far and it has to be enough for this talk.
+
+# + [markdown] tags=[]
+# ## Confidence
+# -
+
+
+# The accuracy looks great, but in the real world we want to use a classifier to automate a process, e.g. to parse digits on a tax form. Depending on the domain, classifying something badly, even very rarely might have significant consequences. For example, let's say our income was suddenly read as 900,000 instead of 100,000, that's just a single digit misclassified, but it will increase the tax that should be collected 9x (assuming a linear tax). 
+#
+# There are multiple solutions to this, on a tax form there will probably be calculations we could do to find inconsistencies, e.g. if the declared tax is 9x smaller than the declared income suggests, the form could be sent for manual review.
+#
+# However, if we're just classifying a single digit, without any other context, how confident should we be about the prediction? Which images should we send for manual review?
+#
+# The model in theory gives us its confidence in the prediction, since it returns an estimated probability for each digit. We could set a threshold under which predictions will be sent for review. We can plot the histogram of the models estimations to see how confident the model is in general.
+
+# + tags=[] slideshow={"slide_type": "skip"} jupyter={"source_hidden": true}
+from fastai.vision.utils import show_images as fastai_show_images
+
+def plot_probabilities(model, indices, ncols=8):
+    x, y_pred, y = mnist_learner(model).get_preds(with_input=True)
+    
+    nrows = len(indices) // ncols
+    axs = plt.subplots(nrows, ncols, figsize=(12, nrows * 2.5))[1].flat
+    
+    for idx, ax in zip(indices, axs): 
+        label = y[idx]
+        top_probs, top_labels = y_pred[idx].sort(dim=0, descending=True)
+        top_titles = [f"{label.item()}: {prob.item():.3f}" for prob, label in zip(top_probs, top_labels)]
+        title = "\n".join([
+            f"{label.item()}", 
+            *top_titles[:3],
+        ])
+        
+        show_image(1 - x[idx], ax=ax, title=title, cmap="gray", vmin=0, vmax=1)
+
+def plot_top_loss_probabilities(model, descending=True, k=24, **plot_kwargs):
+    interpretation = Interpretation.from_learner(mnist_learner(conv4), dl=mnist_loaders.valid.new(shuffle=False))
+    _, top_losses = interpretation.top_losses(k=k, largest=descending)
+    plot_probabilities(model, top_losses)
+
+def plot_top_unsure_probabilities(model, descending=False, k=24, **plot_kwargs):
+    y_pred, _ = mnist_learner(model).get_preds()
+    top_unsure = y_pred.max(dim=1).values.sort(descending=descending).indices[:k]
+    plot_probabilities(model, top_unsure, **plot_kwargs)
+    
+def plot_probability_histogram(model, max_probability=1):
+    y_pred, y = mnist_learner(model).get_preds()
+    y_pred_top = y_pred.sort(dim=1, descending=True).values[:,:2]
+    indices = y_pred_top[:,0] <= max_probability
+    
+    plt.hist(y_pred_top[indices].T, bins=torch.linspace(0, 1, 21), stacked=True)
+    plt.xlim(0, 1)
+    plt.xticks(torch.linspace(0, 1, 11))
+    plt.show()
+    
+    print(f"{indices.sum():,} samples")
+
+
+# + tags=[]
+plot_probability_histogram(conv4)
+# -
+
+# Blue columns represent the highest probability for each validation image and the orange one is the 2nd highest probability. We can see 2 huge spikes, 1st choices are almost always near 100% probability and 2nd almost always at 0%. The model is extremely confident in its choices. To see the middle part we need to zoom in as the values are so small they can barely be seen on the above histogram.
+
+# + tags=[]
+plot_probability_histogram(conv4, max_probability=0.95)
+# -
+
+# Out of all the validation images we only have ~200 where the model is less than 95% certain. We could use 95% as the threshold for manual review, which would mean ~2% of images would have to be reviewed, but that way we could also extend our training data and improve our model. It wouldn't however help for some cases, which we have seen earlier, on the top loss charts, where the model is wrong, but very confident.
+#
+# We can review some examples where the model is the most uncertain about its predictions.
+
+# + tags=[]
+plot_top_unsure_probabilities(conv4, k=24)
+# -
+
+# ## Label smoothing
+
+# The reason why our model is very confident is that we've told it to 😉. We were training the model expecting that it will always give us 100% probability for the correct label... and so the model is trying really hard to do that, even when it's wrong.
+#
+# Another problem with expecting a 100% probability is that mathematically that's hard to do for the model, we are using sigmoid or softmax as the final activation, which force the output values to the `(0, 1)` range and the result is that the model has to have very high activations to reach something near `1`.
+#
+# We could make the job easier for the model by targeting a slightly lower probability, e.g. 90%. This is called Label Smoothing and it will make the model less confident overall, but also should help with both training and spotting uncertainty.
+#
+# `fastai` offers label smoothing as a custom loss function, `LabelSmoothingCrossEntropy` and we need to just specify by how much we want to lower the target.
+#
+# Links
+# - https://nbviewer.org/github/fastai/fastbook/blob/master/07_sizing_and_tta.ipynb
+# - https://arxiv.org/pdf/1906.02629.pdf
+# - https://docs.fast.ai/losses.html#labelsmoothingcrossentropy
+
+# + tags=[]
+from fastai.losses import LabelSmoothingCrossEntropyFlat
+
+conv5 = nn.Sequential(
+    conv3_block(1, 16),
+    conv3_block(16, 32),
+    conv3_block(32, 64),
+    
+    nn.Conv2d(64, 10, 2),
+    nn.Flatten(),
+)
+
+Learner(
+    dls=mnist_augmented_loaders2,
+    model=conv5,
+    loss_func=LabelSmoothingCrossEntropyFlat(eps=0.075),
+    metrics=[accuracy],
+).fit_one_cycle(10, 0.01)
+
+# + tags=[]
+plot_probability_histogram(conv5)
+
+# + tags=[]
+plot_probability_histogram(conv5, max_probability=0.9)
+
+# + tags=[]
+plot_top_loss_probabilities(conv5, k=16)
+
+# + tags=[]
+plot_top_unsure_probabilities(conv5, k=16)
+
+
+# -
 
 # ## Convolutional weights vizualization
 
@@ -1245,7 +1366,7 @@ Interpretation.from_learner(mnist_learner(conv4)).plot_top_losses(k=24, ncols=6,
 #
 # See you next time 👋
 
-# + [markdown] tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true
+# + [markdown] tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true tags=[] jp-MarkdownHeadingCollapsed=true
 # ## Residual / skip connections experiments
 
 # + tags=[]
@@ -1290,80 +1411,3 @@ mnist_learner(res1, dls=mnist_augmented_loaders2).fit_one_cycle(5, 0.01)
 
 # + tags=[]
 Interpretation.from_learner(mnist_learner(res1)).plot_top_losses(k=24, ncols=6, figsize=(12, 5))
-# -
-# ## Label smoothing
-
-
-# + tags=[] slideshow={"slide_type": "skip"}
-from fastai.vision.utils import show_images as fastai_show_images
-
-def plot_top_unsure(model):
-    x, y_pred, y = mnist_learner(conv5).get_preds(with_input=True)
-    most_unsure = y_pred.max(dim=1).values.sort().indices[:24]
-    
-    axs = plt.subplots(3, 8, figsize=(12, 7))[1].flat
-    
-    for idx, ax in zip(most_unsure, axs): 
-        label = y[idx]
-        top_probs, top_labels = y_pred[idx].sort(dim=0, descending=True)
-        top_titles = [f"{label.item()}: {prob.item():.2f}" for prob, label in zip(top_probs, top_labels)]
-        title = "\n".join([
-            f"{label.item()}", 
-            *top_titles[:3],
-        ])
-        
-        show_image(1 - x[idx], ax=ax, title=title, cmap="gray", vmin=0, vmax=1)
-    
-def plot_probability_histogram(model, max_probability=1):
-    y_pred, y = mnist_learner(model).get_preds()
-    y_pred_top = y_pred.sort(dim=1, descending=True).values[:,:2]
-    
-    plt.hist(y_pred_top[y_pred_top[:,0] <= max_probability].T, bins=100, stacked=True)
-    plt.xlim(0, 1)
-    plt.show()
-
-
-# + tags=[]
-plot_probability_histogram(conv4)
-plot_probability_histogram(conv4, max_probability=0.95)
-
-plot_top_unsure(conv4)
-
-# + tags=[]
-from fastai.losses import LabelSmoothingCrossEntropyFlat
-
-conv5 = nn.Sequential(
-    conv3_block(1, 16),
-    conv3_block(16, 32),
-    conv3_block(32, 64),
-    
-    nn.Conv2d(64, 10, 2),
-    nn.Flatten(),
-)
-
-Learner(
-    dls=mnist_augmented_loaders2,
-    model=conv5,
-    loss_func=LabelSmoothingCrossEntropyFlat(eps=0.1),
-    metrics=[accuracy],
-).fit_one_cycle(10, 0.01)
-
-# + tags=[]
-plot_probability_histogram(conv5)
-plot_probability_histogram(conv5, max_probability=0.85)
-
-plot_top_unsure(conv5)
-
-# + tags=[]
-conv5_interpretation = Interpretation.from_learner(mnist_learner(conv5))
-conv5_interpretation.plot_top_losses(k=24, ncols=6, figsize=(12, 5))
-
-# + tags=[]
-conv5_interpretation.plot_top_losses(k=24, largest=False, ncols=6, figsize=(12, 5))
-
-# + tags=[]
-import random
-
-idx = random.sample(range(len(mnist_loaders.dataset.valid)), k=24)
-
-conv5_interpretation.plot_top_losses(k=idx, ncols=6, figsize=(12, 5))
